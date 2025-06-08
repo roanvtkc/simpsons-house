@@ -7,6 +7,9 @@ app = Flask(__name__)
 def send():
     try:
         data = request.get_json()
+        if data is None:
+            return jsonify({"error": "Invalid JSON payload"}), 400
+
         topic = data.get("topic")
         message = data.get("message")
 
