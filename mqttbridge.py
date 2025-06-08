@@ -20,5 +20,6 @@ def send():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    # Make server accessible on your Pi's local IP
+    # Using host="0.0.0.0" exposes the service on all network interfaces,
+    # not only the Pi's specific IP address
     app.run(host="0.0.0.0", port=5000)
