@@ -6,7 +6,10 @@ app = Flask(__name__)
 @app.route('/send', methods=['POST'])
 def send():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
+        if data is None:
+            return jsonify({"error": "Invalid JSON"}), 400
+
         topic = data.get("topic")
         message = data.get("message")
 
