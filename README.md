@@ -4,12 +4,11 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
 
 ## Components
 
-- **SimpsonsHouse.swift** – SwiftUI interface that sends HTTP POST requests to the MQTT bridge.
 - **mqttbridge.py** – Flask service that receives HTTP requests and publishes MQTT messages.
 - **mqttlistener.py** – MQTT client meant to run on the Raspberry Pi. It listens for MQTT topics and sets GPIO states:
   - `light` and `fan` topics toggle digital output pins.
   - `door` topic controls a servo between 0° and 90°.
-- **simpsonsHouse/** – Swift Package containing the SwiftUI code. `Info.plist` has been added to allow HTTP communication on the local network.
+- **simpsonsHouse/** – Swift Package containing the SwiftUI interface (see `simpsonsHouse.swiftpm/ContentView.swift`). `Info.plist` has been added to allow HTTP communication on the local network.
 - The Swift package previously included a playground thumbnail and ZIP archive which were removed to keep the repository free of binary files.
 
 ## Usage
