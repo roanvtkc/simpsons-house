@@ -57,8 +57,12 @@ If you have never used GitHub or Swift Playgrounds before, follow these steps:
 
 1. Visit the repository page in a web browser and tap **Code \> Download ZIP**.
 2. Open the downloaded ZIP file in the **Files** app to extract it.
-3. Inside the extracted folder you will find **simpsonsHouse/simpsonsHouse.swiftpm**. Tap this file and choose **Open in Swift Playgrounds**.
+3. Inside the extracted folder you will find **simpsonsHouse/simpsonsHouse.swiftpm**. Tap this folder and choose **Open in Swift Playgrounds**.
 4. Once the project opens you can build and run it directly on your iPad.
+
+### Troubleshooting
+
+If Playgrounds displays an error like "Could not load app target description" it usually means a different folder was opened. Make sure the `.swiftpm` package itself is selected when launching Playgrounds.
 
 ### Changing the Raspberry Pi IP
 
