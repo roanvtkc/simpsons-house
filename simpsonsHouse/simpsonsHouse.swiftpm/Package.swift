@@ -5,14 +5,33 @@
 // Do not edit it by hand because the contents will be replaced.
 
 import PackageDescription
+import AppleProductTypes
 
 let package = Package(
-    name: "SimpsonsHouse",
+    name: "My App",
     platforms: [
-        .macOS(.v13)
+        .iOS("18.1")
     ],
     products: [
-        .executable(name: "SimpsonsHouse", targets: ["AppModule"])
+        .iOSApplication(
+            name: "My App",
+            targets: ["AppModule"],
+            displayVersion: "1.0",
+            bundleVersion: "1",
+            appIcon: .placeholder(icon: .bicycle),
+            accentColor: .presetColor(.brown),
+            infoPlist: .file(path: "Info.plist"),
+            supportedDeviceFamilies: [
+                .pad,
+                .phone
+            ],
+            supportedInterfaceOrientations: [
+                .portrait,
+                .landscapeRight,
+                .landscapeLeft,
+                .portraitUpsideDown(.when(deviceFamilies: [.pad]))
+            ]
+        )
     ],
     targets: [
         .executableTarget(
