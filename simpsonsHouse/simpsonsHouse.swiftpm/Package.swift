@@ -20,7 +20,9 @@ let package = Package(
             bundleVersion: "1",
             appIcon: .placeholder(icon: .bicycle),
             accentColor: .presetColor(.brown),
-            infoPlist: .file(path: "../Info.plist"),
+            infoPlist: .extendingDefault(with: [
+                "NSAppTransportSecurity": ["NSAllowsArbitraryLoads": true]
+            ]),
             supportedDeviceFamilies: [
                 .pad,
                 .phone
