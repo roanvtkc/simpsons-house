@@ -8,8 +8,8 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
 - **mqttlistener.py** – MQTT client meant to run on the Raspberry Pi. It listens for MQTT topics and sets GPIO states:
   - `light` and `fan` topics toggle digital output pins.
   - `door` topic controls a servo between 0° and 90°.
-- **simpsonsHouse/** – Swift Package containing the SwiftUI interface (see `simpsonsHouse.swiftpm/ContentView.swift`). `Info.plist` has been added to allow HTTP communication on the local network.
-- The Swift package previously included a playground thumbnail and ZIP archive which were removed to keep the repository free of binary files.
+- **SimpsonsHouse.swiftpm.zip** – Swift package containing the SwiftUI interface. Unzip this archive and open the `SimpsonsHouse.swiftpm` folder in Swift Playgrounds. The Local Network capability is declared in `Package.swift`.
+- The package is stored as a ZIP file so you can easily open it on an iPad.
 
 ## Usage
 
@@ -49,11 +49,11 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
 
 ## Allowing HTTP Requests on iOS
 
-`Info.plist` includes the `NSAllowsArbitraryLoads` setting, which disables App Transport Security restrictions so the app can communicate with the local HTTP bridge.
+`Package.swift` enables the Local Network capability and lists the `_http._tcp` Bonjour service so the app can communicate with the HTTP bridge on your network.
 
 ## Advertising the HTTP service via Bonjour
 
-Swift Playgrounds only allows network access to hosts it discovers through Bonjour with service types that match your package's capabilities. To keep the `Info.plist` simple, you can run an mDNS advertiser on the Raspberry Pi so Playgrounds detects the bridge automatically.
+Swift Playgrounds only allows network access to hosts it discovers through Bonjour with service types that match your package's capabilities. Run an mDNS advertiser on the Raspberry Pi so Playgrounds detects the bridge automatically.
 
 1. **Install Avahi**
    ```bash
@@ -100,7 +100,7 @@ If you have never used GitHub or Swift Playgrounds before, follow these steps:
 
 1. Visit the repository page in a web browser and tap **Code \> Download ZIP**.
 2. Open the downloaded ZIP file in the **Files** app to extract it.
-3. Inside the extracted folder you will find **simpsonsHouse/simpsonsHouse.swiftpm**. Tap this folder and choose **Open in Swift Playgrounds**.
+3. Inside the extracted folder you will find **SimpsonsHouse.swiftpm**. Tap this folder and choose **Open in Swift Playgrounds**.
 4. Once the project opens you can build and run it directly on your iPad.
 
 ### Troubleshooting
