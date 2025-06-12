@@ -53,25 +53,35 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
 
 ## Advertising the HTTP service via Bonjour
 
-Swift Playgrounds only allows network access to hosts it discovers through Bonjour with service types that match your package's capabilities. To keep the `Info.plist` simple, you can run an mDNS advertiser on the Raspberry Pi so Playgrounds detects the bridge automatically.
+Swift Playgrounds only allows network access to hosts it discovers through Bonjour with service types that match your package's capabilities. To keep the `Info.plist` simple, you can run an mDNS advertiser on the Raspberry Pi so Playgrounds detects the bridge automatically.
 
 1. **Install Avahi**
    ```bash
    sudo apt-get update
    sudo apt-get install avahi-daemon avahi-utils
    ```
-2. **Create a service definition** at `/etc/avahi/services/mqtt-http.service`:
-   ```xml
-   <?xml version="1.0" standalone='no'?>
-   <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
-   <service-group>
-     <name replace-wildcards="yes">Simpsons House MQTT</name>
-     <service>
-       <type>_http._tcp</type>
-       <port>5000</port>
-     </service>
-   </service-group>
-   ```
+2. **Create a service definition**
+   1. Make sure the services folder exists:
+      ```bash
+      sudo mkdir -p /etc/avahi/services
+      ```
+   2. Open a new file with `nano`:
+      ```bash
+      sudo nano /etc/avahi/services/mqtt-http.service
+      ```
+      Paste the following text, then press <kbd>Ctrl</kbd>+<kbd>X</kbd>, choose
+      **Y** for yes and hit <kbd>Enter</kbd> to save:
+      ```xml
+      <?xml version="1.0" standalone='no'?>
+      <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+      <service-group>
+        <name replace-wildcards="yes">Simpsons House MQTT</name>
+        <service>
+          <type>_http._tcp</type>
+          <port>5000</port>
+        </service>
+      </service-group>
+      ```
 3. **Restart Avahi**
    ```bash
    sudo systemctl restart avahi-daemon
@@ -82,7 +92,7 @@ Swift Playgrounds only allows network access to hosts it discovers through Bonjo
    ```
    The `Simpsons House MQTT` service should appear in the list.
 
-In Playgrounds, enable Local Network under **Settings → Capabilities**, add `_http._tcp` to the Bonjour section, and resume the live view. When prompted, allow the connection. Playgrounds will now discover the Pi's HTTP service and permit calls to `http://10.20.5.66:5000/send`.
+In Playgrounds, enable Local Network under **Settings → Capabilities**, add `_http._tcp` to the Bonjour section, and resume the live view. When prompted, allow the connection. Playgrounds will now discover the Pi's HTTP service and permit calls to `http://10.20.5.66:5000/send`.
 
 ## Opening on an iPad
 
