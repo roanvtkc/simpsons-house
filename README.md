@@ -53,7 +53,7 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
 
 ## Advertising the HTTP service via Bonjour
 
-Swift Playgrounds only allows network access to hosts it discovers through Bonjour with service types that match your package's capabilities. To keep the `Info.plist` simple, you can run an mDNS advertiser on the Raspberry Pi so Playgrounds detects the bridge automatically.
+Swift Playgrounds only allows network access to hosts it discovers through Bonjour with service types that match your package's capabilities. To keep the `Info.plist` simple, you can run an mDNS advertiser on the Raspberry Pi so Playgrounds detects the bridge automatically.
 
 1. **Install Avahi**
    ```bash
@@ -92,7 +92,7 @@ Swift Playgrounds only allows network access to hosts it discovers through Bonjo
    ```
    The `Simpsons House MQTT` service should appear in the list.
 
-In Playgrounds, enable Local Network under **Settings → Capabilities**, add `_http._tcp` to the Bonjour section, and resume the live view. When prompted, allow the connection. Playgrounds will now discover the Pi's HTTP service and permit calls to `http://10.20.5.66:5000/send`.
+In Playgrounds, enable Local Network under **Settings → Capabilities**, add `_http._tcp` to the Bonjour section, and resume the live view. When prompted, allow the connection. Playgrounds will now discover the Pi's HTTP service and permit calls to `http://10.20.5.66:5000/send`.
 
 ## Opening on an iPad
 
