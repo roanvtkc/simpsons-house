@@ -94,6 +94,40 @@ Swift Playgrounds only allows network access to hosts it discovers through Bonjo
 
 In Playgrounds, enable Local Network under **Settings → Capabilities**, add `_http._tcp` to the Bonjour section, and resume the live view. When prompted, allow the connection. Playgrounds will now discover the Pi's HTTP service and permit calls to `http://10.20.5.66:5000/send`.
 
+## Enabling Avahi Reflector
+
+Use Avahi's reflector mode when devices on different VLANs need to see each other via Bonjour. These steps assume you are editing on the Raspberry Pi itself.
+
+1. **Open the configuration file**
+   ```bash
+   sudo nano /etc/avahi/avahi-daemon.conf
+   ```
+
+2. **Find or create the `[reflector]` section**
+   Add the following lines (remove any `#` at the start if they are commented out):
+   ```
+   [reflector]
+   enable-reflector=yes
+   # Optionally limit forwarding to specific VLAN interfaces
+   allow-interfaces=eth0.105,eth0.108,eth0.122
+   ```
+   Exit **nano** by pressing <kbd>Ctrl</kbd>+<kbd>X</kbd>, then **Y** and <kbd>Enter</kbd> to save.
+
+3. **Restart Avahi** so the new settings take effect
+   ```bash
+   sudo systemctl restart avahi-daemon
+   ```
+
+4. **Verify the reflector**
+   On a device in another VLAN, run a discovery command such as:
+   ```bash
+   dns-sd -B _http._tcp
+   ```
+   If `Simpsons House MQTT` shows up, the reflector is working.
+
+Reflecting mDNS across VLANs can expose services more widely, so enable it only if you understand that risk.
+
+
 ## Opening on an iPad
 
 If you have never used GitHub or Swift Playgrounds before, follow these steps:
