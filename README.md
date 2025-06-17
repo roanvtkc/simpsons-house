@@ -32,10 +32,14 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    personal access token or SSH key. You can also download a ZIP file instead,
    as described in the **Opening on an iPad** section.
 
-3. **Install Python dependencies** on the Pi:
+3. **Set up a Python virtual environment** on the Pi and install the dependencies:
    ```bash
+   sudo apt install python3-venv -y
+   python3 -m venv mqttenv
+   source mqttenv/bin/activate
    pip install flask paho-mqtt RPi.GPIO
    ```
+   Reactivate the environment with `source mqttenv/bin/activate` whenever you open a new shell before running the scripts.
 4. **Run the MQTT bridge**:
    ```bash
    python mqttbridge.py
