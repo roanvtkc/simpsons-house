@@ -24,12 +24,10 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    need a CA certificate before packages can be downloaded:
 
    ```bash
-sudo wget http://10.20.1.206/updates/wirelesstkc.pem \
-  -O /usr/local/share/ca-certificates/wirelesstkc.crt
-  
-sudo update-ca-certificates
-
-grep -R "wirelesstkc" /etc/ssl/certs/ca-certificates.crt && echo "CA installed successfully"
+   sudo wget http://10.20.1.206/updates/wirelesstkc.pem \
+   -O /usr/local/share/ca-certificates/wirelesstkc.crt
+   sudo update-ca-certificates
+   grep -R "wirelesstkc" /etc/ssl/certs/ca-certificates.crt && echo "CA installed successfully"
    ```
 
 
