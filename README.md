@@ -39,7 +39,7 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
      echo "CA installed successfully"
 
    # Test HTTPS
-   curl -v https://10.20.1.206/updates/wirelesstkc.pem \
+   curl -v https://365-cache.tkc.wa.edu.au/updates/wirelesstkc.pem \
      --cacert /etc/ssl/certs/ca-certificates.crt
    ```
 
