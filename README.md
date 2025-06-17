@@ -20,15 +20,30 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    - When prompted, log in with **username** `pi` and **password**
      `tkcraspberry`.
 
-2. **Install your network's certificate** (if required). Some Wi‑Fi setups
-   need a CA certificate before packages can be downloaded:
+2. **Install the TKC Wireless CA certificate** (if required). Some Wi‑Fi setups
+  need this certificate before packages can be downloaded:
 
    ```bash
+   # Download the PEM into the system CA folder
    sudo wget http://10.20.1.206/updates/wirelesstkc.pem \
-   -O /usr/local/share/ca-certificates/wirelesstkc.crt
+     -O /usr/local/share/ca-certificates/wirelesstkc.crt
+
+   # (Optional) inspect the certificate
+   head -n 5 /usr/local/share/ca-certificates/wirelesstkc.crt
+
+   # Update the trust store
    sudo update-ca-certificates
-   grep -R "wirelesstkc" /etc/ssl/certs/ca-certificates.crt && echo "CA installed successfully"
+
+   # Confirm the CA is installed
+   grep -R "wirelesstkc" /etc/ssl/certs/ca-certificates.crt && \
+     echo "CA installed successfully"
+
+   # Test HTTPS
+   curl -v https://10.20.1.206/updates/wirelesstkc.pem \
+     --cacert /etc/ssl/certs/ca-certificates.crt
    ```
+
+   Look for `Verify return code: 0 (ok)` in the curl output.
 
 
 3. **Download this repository onto the Pi** so the bridge and listener scripts
