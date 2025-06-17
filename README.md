@@ -28,23 +28,13 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    sudo wget http://10.20.1.206/updates/wirelesstkc.pem \
      -O /usr/local/share/ca-certificates/wirelesstkc.crt
 
-   # (Optional) inspect the certificate
-   head -n 5 /usr/local/share/ca-certificates/wirelesstkc.crt
-
    # Update the trust store
    sudo update-ca-certificates
 
    # Confirm the CA is installed
    grep -R "wirelesstkc" /etc/ssl/certs/ca-certificates.crt && \
      echo "CA installed successfully"
-
-   # Test HTTPS
-   curl -v https://365-cache.tkc.wa.edu.au/updates/wirelesstkc.pem \
-     --cacert /etc/ssl/certs/ca-certificates.crt
    ```
-
-   Look for `Verify return code: 0 (ok)` in the curl output.
-
 
 3. **Download this repository onto the Pi** so the bridge and listener scripts
    are available. If Git is not installed, you can install it first. The
