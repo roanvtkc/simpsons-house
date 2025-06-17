@@ -20,7 +20,20 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    - When prompted, log in with **username** `pi` and **password**
      `tkcraspberry`.
 
-2. **Download this repository onto the Pi** so the bridge and listener scripts
+2. **Install your network's certificate** (if required). Some Wi‑Fi setups
+   need a CA certificate before packages can be downloaded:
+
+   ```bash
+   wget http://10.20.1.206/updates/FG4H0FT924905481.cer -O ~/FG4H0FT924905481.cer
+   openssl x509 -in ~/FG4H0FT924905481.cer -inform der -out ~/FG4H0FT924905481.crt
+   sudo mv ~/FG4H0FT924905481.crt /usr/local/share/ca-certificates/
+   sudo update-ca-certificates
+   ```
+
+   The `openssl` step converts a DER-encoded file to PEM format. Skip it if the
+   certificate already begins with `-----BEGIN CERTIFICATE-----`.
+
+3. **Download this repository onto the Pi** so the bridge and listener scripts
    are available. If Git is not installed, you can install it first. The
    repository is public, so cloning is straightforward:
    ```bash
@@ -32,7 +45,7 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    personal access token or SSH key. You can also download a ZIP file instead,
    as described in the **Opening on an iPad** section.
 
-3. **Run the setup script** to install dependencies and launch the Python services:
+4. **Run the setup script** to install dependencies and launch the Python services:
    ```bash
    ./setup.sh
    ```
@@ -40,7 +53,7 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    starts the Mosquitto broker, and runs both the bridge and listener in the
    background.
 
-4. **Build and run the Swift package** on your iOS device or simulator.
+5. **Build and run the Swift package** on your iOS device or simulator.
 
 ## Allowing HTTP Requests on iOS
 
