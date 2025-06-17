@@ -119,8 +119,6 @@ Use Avahi's reflector mode when devices on different VLANs need to see each othe
    ```
    [reflector]
    enable-reflector=yes
-   # Optionally limit forwarding to specific VLAN interfaces
-   allow-interfaces=eth0.105,eth0.108,eth0.122
    ```
    Exit **nano** by pressing <kbd>Ctrl</kbd>+<kbd>X</kbd>, then **Y** and <kbd>Enter</kbd> to save.
 
