@@ -47,7 +47,7 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    repository is public, so cloning is straightforward:
    ```bash
    sudo apt update && sudo apt install -y git
-   git clone https://github.com/roanvtkc/simpsons-house.git
+   GIT_SSL_NO_VERIFY=true git clone https://github.com/roanvtkc/simpsons-house.git
    cd simpsons-house
    ```
    If you ever work from a private fork you'll need to authenticate using a
