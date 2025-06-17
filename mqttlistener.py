@@ -8,6 +8,7 @@ SERVO_PIN = 22
 
 # Initial setup for GPIO
 GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
 GPIO.setup(LIGHT_PIN, GPIO.OUT)
 GPIO.setup(FAN_PIN, GPIO.OUT)
 GPIO.setup(SERVO_PIN, GPIO.OUT)
