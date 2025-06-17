@@ -52,9 +52,10 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    ```bash
    python mqttbridge.py
    ```
-6. **Open another SSH tab** (Shelly lets you create multiple sessions) and run
-   the listener:
+6. **Open another SSH tab** (Shelly lets you create multiple sessions). In the
+   new shell, navigate back to the project directory and run the listener:
    ```bash
+   cd simpsons-house
    sudo ./mqttenv/bin/python mqttlistener.py
    ```
 7. **Build and run the Swift package** on your iOS device or simulator.
