@@ -24,14 +24,14 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    need a CA certificate before packages can be downloaded:
 
    ```bash
-   wget http://10.20.1.206/updates/FG4H0FT924905481.cer -O ~/FG4H0FT924905481.cer
-   openssl x509 -in ~/FG4H0FT924905481.cer -inform der -out ~/FG4H0FT924905481.crt
-   sudo mv ~/FG4H0FT924905481.crt /usr/local/share/ca-certificates/
-   sudo update-ca-certificates
+sudo wget http://10.20.1.206/updates/wirelesstkc.pem \
+  -O /usr/local/share/ca-certificates/wirelesstkc.crt
+  
+sudo update-ca-certificates
+
+grep -R "wirelesstkc" /etc/ssl/certs/ca-certificates.crt && echo "CA installed successfully"
    ```
 
-   The `openssl` step converts a DER-encoded file to PEM format. Skip it if the
-   certificate already begins with `-----BEGIN CERTIFICATE-----`.
 
 3. **Download this repository onto the Pi** so the bridge and listener scripts
    are available. If Git is not installed, you can install it first. The
