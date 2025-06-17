@@ -32,33 +32,15 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    personal access token or SSH key. You can also download a ZIP file instead,
    as described in the **Opening on an iPad** section.
 
-3. **Set up a Python virtual environment** on the Pi and install the dependencies:
+3. **Run the setup script** to install dependencies and launch the Python services:
    ```bash
-   sudo apt install python3-venv -y
-   python3 -m venv mqttenv
-   source mqttenv/bin/activate
-   pip install flask paho-mqtt RPi.GPIO
+   ./setup.sh
    ```
-   Reactivate the environment with `source mqttenv/bin/activate` whenever you open a new shell before running the scripts.
+   The script installs required packages, sets up a Python virtual environment,
+   starts the Mosquitto broker, and runs both the bridge and listener in the
+   background.
 
-4. **Install and start the Mosquitto MQTT broker** so the bridge and listener can connect:
-   ```bash
-   sudo apt install -y mosquitto
-   sudo systemctl enable mosquitto
-   sudo systemctl start mosquitto
-   ```
-
-5. **Run the MQTT bridge**:
-   ```bash
-   python mqttbridge.py
-   ```
-6. **Open another SSH tab** (Shelly lets you create multiple sessions). In the
-   new shell, navigate back to the project directory and run the listener:
-   ```bash
-   cd simpsons-house
-   sudo ./mqttenv/bin/python mqttlistener.py
-   ```
-7. **Build and run the Swift package** on your iOS device or simulator.
+4. **Build and run the Swift package** on your iOS device or simulator.
 
 ## Allowing HTTP Requests on iOS
 
