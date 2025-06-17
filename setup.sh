@@ -2,6 +2,10 @@
 
 set -e
 
+# Ensure the TKC Wireless CA certificate is installed so HTTPS downloads work
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+"$SCRIPT_DIR/install_ca.sh"
+
 # Install required packages
 sudo apt update
 sudo apt install -y git python3-venv mosquitto
