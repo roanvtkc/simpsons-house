@@ -40,16 +40,24 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    pip install flask paho-mqtt RPi.GPIO
    ```
    Reactivate the environment with `source mqttenv/bin/activate` whenever you open a new shell before running the scripts.
-4. **Run the MQTT bridge**:
+
+4. **Install and start the Mosquitto MQTT broker** so the bridge and listener can connect:
+   ```bash
+   sudo apt install -y mosquitto
+   sudo systemctl enable mosquitto
+   sudo systemctl start mosquitto
+   ```
+
+5. **Run the MQTT bridge**:
    ```bash
    python mqttbridge.py
    ```
-5. **Open another SSH tab** (Shelly lets you create multiple sessions) and run
+6. **Open another SSH tab** (Shelly lets you create multiple sessions) and run
    the listener:
    ```bash
    sudo ./mqttenv/bin/python mqttlistener.py
    ```
-6. **Build and run the Swift package** on your iOS device or simulator.
+7. **Build and run the Swift package** on your iOS device or simulator.
 
 ## Allowing HTTP Requests on iOS
 
