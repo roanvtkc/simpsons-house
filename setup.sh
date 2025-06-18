@@ -1,14 +1,17 @@
 #!/bin/bash
-
 set -e
 
-# Ensure the TKC Wireless CA certificate is installed so HTTPS downloads work
+# Top-level setup script for the MQTT bridge & listener
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-"$SCRIPT_DIR/install_ca.sh"
 
-# Install required packages
+# Run the CA-install helper in its own process and guard errors
+if ! bash "$SCRIPT_DIR/install_ca.sh"; then
+    echo "install_ca.sh failed, continuing with main setup..."
+fi
+
+echo "Installing required packages..."
 sudo apt update
-sudo apt install -y git python3-venv mosquitto
+sudo apt install -y git python3-venv mosquitto build-essential python3-dev
 
 # Clone the repo if needed
 if [ ! -f mqttbridge.py ]; then
@@ -16,7 +19,7 @@ if [ ! -f mqttbridge.py ]; then
     cd simpsons-house
 fi
 
-# Create the Python virtual environment
+# Create Python virtual environment
 if [ ! -d mqttenv ]; then
     python3 -m venv mqttenv
 fi
