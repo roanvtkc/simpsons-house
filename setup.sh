@@ -25,6 +25,7 @@ if [ ! -d mqttenv ]; then
 fi
 source mqttenv/bin/activate
 pip install --upgrade pip
+pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pip setuptools
 pip install flask paho-mqtt RPi.GPIO
 
 # Enable and start the MQTT broker
