@@ -22,12 +22,13 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
 
 2. **Install the TKC Wireless CA certificate** (if required). Some Wi‑Fi setups
   need this certificate before packages can be downloaded. A helper script
-  (`install_ca.sh`) is included, or you can run the following commands manually:
+  (`install_ca.sh`) is included and now checks if the certificate is already
+  present. You can also run the commands below manually:
 
    ```bash
    # Download the PEM into the system CA folder
-   sudo wget http://10.20.1.206/updates/wirelesstkc.pem \
-     -O /usr/local/share/ca-certificates/wirelesstkc.crt
+   sudo wget http://10.20.1.83:8081/wirelesstkc.pem \
+    -O /usr/local/share/ca-certificates/wirelesstkc.crt
 
    # Update the trust store
    sudo update-ca-certificates
@@ -36,6 +37,9 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    grep -R "wirelesstkc" /etc/ssl/certs/ca-certificates.crt && \
      echo "CA installed successfully"
    ```
+
+   The `install_ca.sh` script performs these steps automatically and reports if
+   the certificate is already present.
 
    You may see an error like `server certificate verification failed. CAfile:
    none CRLfile: none` when running `apt` or `git`. If so, run the included
@@ -58,10 +62,11 @@ This project provides a simple SwiftUI interface for toggling devices in a simul
    ```bash
    ./setup.sh
    ```
-   The script installs required packages, sets up a Python virtual environment,
-   starts the Mosquitto broker, and runs both the bridge and listener in the
-   background. It also calls `install_ca.sh` so the CA certificate is installed
-   automatically if needed.
+   The script installs required packages (including `build-essential` and
+   `python3-dev`), sets up a Python virtual environment, starts the Mosquitto
+   broker, and runs both the bridge and listener in the background. It will also
+   call `install_ca.sh` so the CA certificate is installed automatically if
+   needed and clone the repository if the scripts are missing.
 
 5. **Build and run the Swift package** on your iOS device or simulator.
 
