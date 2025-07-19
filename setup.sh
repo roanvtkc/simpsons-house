@@ -1,39 +1,52 @@
 #!/bin/bash
 set -e
 
-# Top-level setup script for the MQTT bridge & listener
+# Top-level setup script for the MQTT listener and broker
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Run the CA-install helper in its own process and guard errors
+# Install CA certificate if needed
 if ! bash "$SCRIPT_DIR/install_ca.sh"; then
-    echo "install_ca.sh failed, continuing with main setup..."
+    echo "install_ca.sh failed or already installed, continuing..."
 fi
 
-echo "Installing required packages..."
+echo "Updating package lists and installing dependencies..."
 sudo apt update
-sudo apt install -y git python3-venv mosquitto build-essential python3-dev
+sudo apt install -y git python3-venv mosquitto mosquitto-clients avahi-daemon avahi-utils build-essential python3-dev
 
-# Clone the repo if needed
-if [ ! -f mqttbridge.py ]; then
-    git clone https://github.com/roanvtkc/simpsons-house.git
-    cd simpsons-house
+echo "Cloning or updating the repository..."
+if [ ! -d "$SCRIPT_DIR/simpsons-house" ]; then
+    git clone https://github.com/roanvtkc/simpsons-house.git "$SCRIPT_DIR/simpsons-house"
 fi
+cd "$SCRIPT_DIR/simpsons-house"
 
-# Create Python virtual environment
+# Create and activate Python virtual environment
 if [ ! -d mqttenv ]; then
     python3 -m venv mqttenv
 fi
 source mqttenv/bin/activate
-pip install --upgrade pip
-pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pip setuptools
-pip install flask paho-mqtt RPi.GPIO
 
-# Enable and start the MQTT broker
+# Upgrade pip and install required Python packages
+pip install --upgrade pip setuptools wheel
+pip install paho-mqtt RPi.GPIO
+
+# Enable and start Mosquitto broker
 sudo systemctl enable mosquitto
-sudo systemctl start mosquitto
+sudo systemctl restart mosquitto
 
-# Launch bridge and listener in the background
-nohup python mqttbridge.py &>/tmp/mqttbridge.log &
-nohup sudo ./mqttenv/bin/python mqttlistener.py &>/tmp/mqttlistener.log &
+echo "Configuring Avahi to advertise MQTT service..."
+cat <<EOF | sudo tee /etc/avahi/services/mqtt.service
+<service-group>
+  <name replace-wildcards="yes">Simpsons House MQTT</name>
+  <service>
+    <type>_mqtt._tcp</type>
+    <port>1883</port>
+  </service>
+</service-group>
+EOF
+sudo systemctl restart avahi-daemon
 
-echo "Setup complete. Bridge and listener are running."
+# Launch MQTT listener in background
+echo "Launching MQTT listener..."
+nohup python3 mqttlistener.py &> /tmp/mqttlistener.log &
+
+echo "Setup complete. Mosquitto broker running and mqttlistener.py started."
