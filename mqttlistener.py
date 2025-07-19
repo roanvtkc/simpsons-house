@@ -24,7 +24,6 @@ TOPIC_DOOR  = "home/door"
 # ─── SETUP ───────────────────────────────────────────────────────────────────────
 
 # Logging setup
-typing=logging
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     level=logging.INFO
