@@ -1,160 +1,103 @@
-# Simpsons House Control
+# Simpsons House Control (MQTT)
 
-This project provides a simple SwiftUI interface for toggling devices in a simulated "Simpsons" house. The app communicates with a Python MQTT bridge running on a Raspberry Pi to control GPIO pins.
+A simple home‑automation project: control LEDs and a servo on a Raspberry Pi directly from a SwiftUI app using MQTT.
 
-## Components
+## Table of Contents
 
-- **mqttbridge.py** – Flask service that receives HTTP requests and publishes MQTT messages.
-- **mqttlistener.py** – MQTT client meant to run on the Raspberry Pi. It listens for MQTT topics and sets GPIO states:
-  - `light` and `fan` topics toggle digital output pins.
-  - `door` topic controls a servo between 0° and 90°.
-- **SimpsonsHouse.swiftpm.zip** – Swift package containing the SwiftUI interface. Unzip this archive and open the `SimpsonsHouse.swiftpm` folder in Swift Playgrounds. The Local Network capability is declared in `Package.swift`.
-- The package is stored as a ZIP file so you can easily open it on an iPad.
+* [Features](#features)
+* [Prerequisites](#prerequisites)
+* [Installation](#installation)
+* [Usage](#usage)
+* [Verifying Services](#verifying-services)
+* [Hardware Wiring](#hardware-wiring)
+* [SwiftUI App Configuration](#swiftui-app-configuration)
+* [License](#license)
+
+## Features
+
+* **Direct MQTT control**: no HTTP proxy needed, uses Mosquitto broker on the Pi.
+* **SwiftUI interface**: built in Swift Playgrounds or Xcode with SwiftMQTT.
+* **mDNS discovery**: Avahi advertises `_mqtt._tcp` so iOS devices can find the broker.
+
+## Prerequisites
+
+* Raspberry Pi running Raspberry Pi OS (formerly Raspbian).
+* SSH access to the Pi (default `pi`/`tkcraspberry`).
+* iPad or macOS device on the same local network.
+
+## Installation
+
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/roanvtkc/simpsons-house.git
+   cd simpsons-house
+   ```
+2. **Run the setup script**
+
+   ```bash
+   chmod +x setup.sh
+   ./setup.sh
+   ```
+
+   This will:
+
+   * Install Mosquitto broker and Avahi for mDNS.
+   * Create a Python virtual environment and install required packages (`paho-mqtt`, `RPi.GPIO`).
+   * Configure Avahi to advertise the MQTT service on `_mqtt._tcp` port 1883.
+   * Launch the MQTT listener script in the background.
 
 ## Usage
 
-1. **Connect to your Raspberry Pi via SSH**. An easy way on iPad is the free
-   **Shelly** app from the App Store.
-   - Add a new host in Shelly using the Pi's IP address (found via your router or
-     by running `hostname -I` directly on the Pi).
-   - When prompted, log in with **username** `pi` and **password**
-     `tkcraspberry`.
+1. On your iPad/macOS, open the SwiftUI app (`SimpsonsHouse.swiftpm`) in Swift Playgrounds or Xcode.
+2. Grant **Local Network** permission when prompted.
+3. Tap the toggles to send MQTT messages to the Pi and control the hardware.
 
-2. **Install the TKC Wireless CA certificate** (if required). Some Wi‑Fi setups
-  need this certificate before packages can be downloaded. A helper script
-  (`install_ca.sh`) is included and now checks if the certificate is already
-  present. You can also run the commands below manually:
+## Verifying Services
 
-   ```bash
-   # Download the PEM into the system CA folder
-   sudo wget http://10.20.1.83:8081/wirelesstkc.pem \
-    -O /usr/local/share/ca-certificates/wirelesstkc.crt
+* **Mosquitto broker**:
 
-   # Update the trust store
-   sudo update-ca-certificates
+  ```bash
+  sudo systemctl status mosquitto
+  ```
+* **mDNS advertisement**:
 
-   # Confirm the CA is installed
-   grep -R "wirelesstkc" /etc/ssl/certs/ca-certificates.crt && \
-     echo "CA installed successfully"
-   ```
+  ```bash
+  avahi-browse -rt _mqtt._tcp
+  ```
+* **Listener logs**:
 
-   The `install_ca.sh` script performs these steps automatically and reports if
-   the certificate is already present.
+  ```bash
+  tail -f /tmp/mqttlistener.log
+  ```
 
-   You may see an error like `server certificate verification failed. CAfile:
-   none CRLfile: none` when running `apt` or `git`. If so, run the included
-   `install_ca.sh` script (or the commands above) to install the certificate
-   automatically.
+## Hardware Wiring
 
-3. **Download this repository onto the Pi** so the bridge and listener scripts
-   are available. If Git is not installed, you can install it first. The
-   repository is public, so cloning is straightforward:
-   ```bash
-   sudo apt update && sudo apt install -y git
-   GIT_SSL_NO_VERIFY=true git clone https://github.com/roanvtkc/simpsons-house.git
-   cd simpsons-house
-   ```
-   If you ever work from a private fork you'll need to authenticate using a
-   personal access token or SSH key. You can also download a ZIP file instead,
-   as described in the **Opening on an iPad** section.
+Use BCM pin numbers:
 
-4. **Run the setup script** to install dependencies and launch the Python services:
-   ```bash
-   ./setup.sh
-   ```
-   The script installs required packages (including `build-essential` and
-   `python3-dev`), sets up a Python virtual environment, starts the Mosquitto
-   broker, and runs both the bridge and listener in the background. It will also
-   call `install_ca.sh` so the CA certificate is installed automatically if
-   needed and clone the repository if the scripts are missing.
+|     Device | BCM Pin | Notes                                       |
+| ---------: | ------: | ------------------------------------------- |
+|  Light LED |      17 | LED + 220 Ω resistor to GND                 |
+|    Fan LED |      27 | LED or small fan (use transistor if needed) |
+| Door Servo |      22 | Servo signal to pin, power to 5 V + GND     |
 
-5. **Build and run the Swift package** on your iOS device or simulator.
+Ensure external loads are driven via appropriate drivers or relays.
 
-## Allowing HTTP Requests on iOS
+## SwiftUI App Configuration
 
-`Package.swift` enables the Local Network capability and lists the `_http._tcp` Bonjour service so the app can communicate with the HTTP bridge on your network.
+* **Swift Package**: includes `SwiftMQTT` dependency.
+* **Info.plist** entries:
 
-## Advertising the HTTP service via Bonjour
+  ```xml
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Needs local network access to connect to MQTT broker</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_mqtt._tcp</string>
+  </array>
+  ```
+* **Host IP fallback**: you can hard‑code your Pi’s IP in `ContentView.swift` if mDNS fails.
 
-Swift Playgrounds only allows network access to hosts it discovers through Bonjour with service types that match your package's capabilities. Run an mDNS advertiser on the Raspberry Pi so Playgrounds detects the bridge automatically.
+## License
 
-1. **Install Avahi**
-   ```bash
-   sudo apt-get update
-   sudo apt-get install avahi-daemon avahi-utils
-   ```
-2. **Create a service definition**
-   1. Make sure the services folder exists:
-      ```bash
-      sudo mkdir -p /etc/avahi/services
-      ```
-   2. Open a new file with `nano`:
-      ```bash
-      sudo nano /etc/avahi/services/mqtt-http.service
-      ```
-      Paste the following text, then press <kbd>Ctrl</kbd>+<kbd>X</kbd>, choose
-      **Y** for yes and hit <kbd>Enter</kbd> to save:
-      ```xml
-      <?xml version="1.0" standalone='no'?>
-      <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
-      <service-group>
-        <name replace-wildcards="yes">Simpsons House MQTT</name>
-        <service>
-          <type>_http._tcp</type>
-          <port>5000</port>
-        </service>
-      </service-group>
-      ```
-3. **Restart Avahi**
-   ```bash
-   sudo systemctl restart avahi-daemon
-   ```
-4. **Verify the broadcast** from a macOS terminal:
-   ```bash
-   dns-sd -B _http._tcp
-   ```
-   The `Simpsons House MQTT` service should appear in the list.
-
-In Playgrounds, enable Local Network under **Settings → Capabilities**, add `_http._tcp` to the Bonjour section, and resume the live view. When prompted, allow the connection. Playgrounds will now discover the Pi's HTTP service and permit calls to `http://10.20.5.66:5000/send`.
-
-
-## Opening on an iPad
-
-If you have never used GitHub or Swift Playgrounds before, follow these steps:
-
-1. Visit the repository page in a web browser and tap **Code \> Download ZIP**.
-2. Open the downloaded ZIP file in the **Files** app to extract it.
-3. Inside the extracted folder you will find **SimpsonsHouse.swiftpm**. Tap this folder and choose **Open in Swift Playgrounds**.
-4. Once the project opens you can build and run it directly on your iPad.
-
-### Troubleshooting
-
-If Playgrounds displays an error like "Could not load app target description" it usually means a different folder was opened. Make sure the `.swiftpm` package itself is selected when launching Playgrounds.
-
-### Changing the Raspberry Pi IP
-
-The Swift code sends requests to the Python service running on your Raspberry Pi. To point the app at your own Pi:
-
-1. In Swift Playgrounds, open `ContentView.swift`.
-2. Near the top of the file locate the line that looks like:
-
-   ```swift
-   guard let url = URL(string: "http://10.20.5.66:5000/send") else { return }
-   ```
-
-3. Replace `10.20.5.66` with the IP address of your Pi. You can find the address on the Pi by running `hostname -I` in the terminal.
-
-Save the file and run the project again. The toggles will now send commands to your Pi.
-
-## Hardware wiring
-
-The `mqttlistener.py` script expects the following connections on the Pi (using the BCM pin numbering scheme):
-
-| Device | BCM Pin | Notes |
-|-------|--------|------|
-| Light output | **17** | Connect an LED (with a 220 Ω resistor) between pin 17 and ground. |
-| Fan output | **27** | Connect another LED or small DC fan between pin 27 and ground. |
-| Servo | **22** | Connect the servo signal wire to pin 22, power to the Pi's 5 V pin and ground to a ground pin. |
-
-Make sure your components do not draw more current than the Pi can supply directly. When in doubt, use a transistor or relay module to switch larger loads.
-
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
