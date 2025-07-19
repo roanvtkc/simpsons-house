@@ -16,15 +16,21 @@ BROKER_HOST = "localhost"
 BROKER_PORT = 1883
 KEEPALIVE   = 60
 
+# MQTT topics (matching Swift Playgrounds)
+TOPIC_LIGHT = "home/light"
+TOPIC_FAN   = "home/fan"
+TOPIC_DOOR  = "home/door"
+
 # ─── SETUP ───────────────────────────────────────────────────────────────────────
 
-# Logging
+# Logging setup
+typing=logging
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     level=logging.INFO
 )
 
-# GPIO initialisation
+# GPIO initialization
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 
@@ -32,7 +38,7 @@ GPIO.setup(LIGHT_PIN, GPIO.OUT)
 GPIO.setup(FAN_PIN,   GPIO.OUT)
 GPIO.setup(SERVO_PIN, GPIO.OUT)
 
-# Servo PWM at 50 Hz
+# Servo PWM at 50 Hz
 SERVO_PWM = GPIO.PWM(SERVO_PIN, 50)
 SERVO_PWM.start(0)
 
@@ -48,30 +54,30 @@ def set_servo_angle(angle: int) -> None:
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         logging.info("Connected to MQTT broker")
-        client.subscribe("light")
-        client.subscribe("fan")
-        client.subscribe("door")
-        logging.info("Subscribed to: light, fan, door")
+        # Subscribe to updated topics
+        client.subscribe(TOPIC_LIGHT)
+        client.subscribe(TOPIC_FAN)
+        client.subscribe(TOPIC_DOOR)
+        logging.info(f"Subscribed to: {TOPIC_LIGHT}, {TOPIC_FAN}, {TOPIC_DOOR}")
     else:
         logging.error(f"Bad connection (rc={rc})")
+
 
 def on_message(client, userdata, msg):
     payload = msg.payload.decode().strip().upper()
     logging.info(f"→ Topic: {msg.topic}, Payload: {payload}")
     
-    if msg.topic == "light":
-        # Expecting "ON" or "OFF"
+    if msg.topic == TOPIC_LIGHT:
         state = GPIO.HIGH if payload == "ON" else GPIO.LOW
         GPIO.output(LIGHT_PIN, state)
-        logging.info(f"Light set to {'ON' if state else 'OFF'}")
+        logging.info(f"Light set to {'ON' if state==GPIO.HIGH else 'OFF'}")
     
-    elif msg.topic == "fan":
+    elif msg.topic == TOPIC_FAN:
         state = GPIO.HIGH if payload == "ON" else GPIO.LOW
         GPIO.output(FAN_PIN, state)
-        logging.info(f"Fan set to {'ON' if state else 'OFF'}")
+        logging.info(f"Fan set to {'ON' if state==GPIO.HIGH else 'OFF'}")
     
-    elif msg.topic == "door":
-        # Use "ON" → open (90°), "OFF" → closed (0°)
+    elif msg.topic == TOPIC_DOOR:
         angle = 90 if payload == "ON" else 0
         set_servo_angle(angle)
         logging.info(f"Door servo moved to {angle}°")
