@@ -53,6 +53,13 @@ A simple home‑automation project: control LEDs and a servo on a Raspberry Pi 
    - Create a Python virtual environment and install `paho-mqtt` and `RPi.GPIO`.
    - Configure Avahi to advertise the MQTT service on `_mqtt._tcp` port 1883.
    - Start the Mosquitto broker and the `mqttlistener.py` script in the background.
+   - Configure Mosquitto to listen on all interfaces via /etc/mosquitto/conf.d/01-listener.conf
+     with the following contents:
+     ```conf
+     listener 1883 0.0.0.0
+     allow_anonymous true
+     ```
+     Restart the service with `sudo systemctl restart mosquitto`.
 
 ## Usage
 
@@ -68,6 +75,17 @@ A simple home‑automation project: control LEDs and a servo on a Raspberry Pi 
   ```bash
   sudo systemctl status mosquitto
   ```
+- **Listener check**:
+  ```bash
+  sudo netstat -tlnp | grep 1883
+  ```
+  You should see `0.0.0.0:1883` (and `:::1883`) rather than `127.0.0.1:1883`.
+- **Broker test**:
+  ```bash
+  mosquitto_pub -h localhost -t home/light -m ON
+  mosquitto_sub -h localhost -t home/# -v
+  ```
+  You should see the `home/light` message printed.
 - **mDNS advertisement**:
   ```bash
   avahi-browse -rt _mqtt._tcp
@@ -105,6 +123,7 @@ Use BCM pin numbering:
   </array>
   ```
 - **Host IP fallback**: you may hard‑code your Pi’s IP in `ContentView.swift` if mDNS discovery fails.
+- **Swift Playgrounds capability**: In App Settings → Capabilities → Local Network, add the service `_mqtt._tcp` and ensure Playgrounds is allowed in Settings → Privacy → Local Network.
 
 ## Troubleshooting
 
@@ -127,9 +146,17 @@ Or remove the offending line in `~/.ssh/known_hosts` manually.
 
 ### MQTT connection errors
 
-- Verify the broker is listening: `sudo netstat -tlnp | grep 1883`.
+- Verify the broker is listening: `sudo netstat -tlnp | grep 1883` (should show `0.0.0.0:1883`).
+- Test publish/subscription locally as in the *Verifying Services* section.
 - Check Avahi advertisement: `avahi-browse -rt _mqtt._tcp`.
-- Ensure your device and Pi are on the same Wi‑Fi network.
+- Ensure Playgrounds is allowed under Settings → Privacy → Local Network.
+- If problems persist, add this Swift snippet before connecting:
+  ```swift
+  let testConn = NWConnection(host: .init("<pi_ip>"), port: 1883, using: .tcp)
+  testConn.stateUpdateHandler = { print("Socket test state:", $0) }
+  testConn.start(queue: .main)
+  ```
+  A state of `.ready` means the connection path is open.
 
 ## License
 

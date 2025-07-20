@@ -30,6 +30,14 @@ pip install --upgrade pip setuptools wheel
 pip install paho-mqtt RPi.GPIO
 
 # Enable and start Mosquitto broker
+echo "Configuring Mosquitto listener..."
+sudo tee /etc/mosquitto/conf.d/01-listener.conf >/dev/null <<EOF
+listener 1883 0.0.0.0
+allow_anonymous true
+EOF
+# Mosquitto crashes if multiple log_dest lines are present
+sudo sed -i '/^log_dest file/d' /etc/mosquitto/mosquitto.conf /etc/mosquitto/conf.d/*.conf 2>/dev/null || true
+
 sudo systemctl enable mosquitto
 sudo systemctl restart mosquitto
 
