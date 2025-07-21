@@ -1,4 +1,17 @@
-# 🏠 Simpson's House Smart Home Control
+<details>
+<summary><strong>SSH Issues</strong></summary>
+
+**"Host key verification failed" or "Remote host identification has changed":**
+```bash
+ssh-keygen -R 192.168.5.115
+```
+Then retry the SSH connection and accept the new host key when prompted.
+
+**Cannot connect via SSH:**
+- Verify SSH is enabled: `sudo systemctl enable ssh`
+- Check if SSH service is running: `sudo systemctl status ssh`
+- Ensure you're using the correct IP address: `hostname -I`
+</details># 🏠 Simpson's House Smart Home Control
 
 A comprehensive smart home automation project that allows you to control LEDs, fans, and servos on a Raspberry Pi directly from an iOS Swift Playgrounds app using **MQTT over WebSocket**.
 
@@ -8,6 +21,7 @@ A comprehensive smart home automation project that allows you to control LEDs, f
 [![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi-red)](https://www.raspberrypi.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
+![Simpson's House Banner](https://via.placeholder.com/800x200/FFD700/000000?text=🏠+Simpson's+House+Smart+Home)
 
 ## ✨ Features
 
@@ -37,6 +51,7 @@ graph TD
 
 - **Raspberry Pi** running Raspberry Pi OS (32-bit or 64-bit)
 - **SSH access** to the Pi (default credentials: `pi`/`tkcraspberry`)
+- **Git installed** on the Pi (will be installed automatically if missing)
 - **iOS device** with Swift Playgrounds 4+ or macOS with Xcode 13+
 - **Hardware components**: LEDs, resistors, servo motor, breadboard
 - **Same network**: Both devices must be on the same local network
@@ -57,6 +72,14 @@ Wire your components using **BCM pin numbering**:
 
 ### 2. Raspberry Pi Setup
 
+**Install Git (if needed):**
+
+On your Raspberry Pi, if you see `git: command not found` when trying to clone:
+```bash
+sudo apt update
+sudo apt install -y git
+```
+
 **Clone the repository:**
 ```bash
 git clone https://github.com/roanvtkc/simpsons-house.git
@@ -70,7 +93,7 @@ chmod +x setup.sh
 ```
 
 The setup script will:
-- ✅ Install all required packages
+- ✅ Install all required packages (including git if missing)
 - ✅ Configure MQTT with WebSocket support (ports 1883 and 9001)
 - ✅ Set up Python environment and GPIO control
 - ✅ Create systemd services for automatic startup
@@ -194,6 +217,24 @@ ws.onerror = (error) => console.log('WebSocket error:', error);
 ```
 
 ## 🐛 Troubleshooting
+
+<details>
+<summary><strong>Setup Issues</strong></summary>
+
+**"git: command not found" error:**
+```bash
+sudo apt update
+sudo apt install -y git
+```
+Then retry the git clone command.
+
+**"Permission denied" when running setup:**
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+Make sure you're running as the `pi` user, not root.
+</details>
 
 <details>
 <summary><strong>Connection Issues</strong></summary>
