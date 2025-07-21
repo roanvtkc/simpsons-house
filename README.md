@@ -1,4 +1,63 @@
 <details>
+<summary><strong>GPIO & Hardware Issues</strong></summary>
+
+**Test GPIO pins before MQTT setup:**
+```bash
+# Install GPIO utilities
+sudo apt install -y wiringpi gpio-utils
+
+# Test individual pins
+gpio mode 17 out
+gpio write 17 1  # Turn ON
+gpio write 17 0  # Turn OFF
+
+# Check pin states in real-time
+watch -n 1 'gpio readall'
+```
+
+**Python GPIO test script:**
+```python
+#!/usr/bin/env python3
+import RPi.GPIO as GPIO
+import time
+
+# Test all GPIO pins
+LIGHT_PIN = 17
+FAN_PIN = 27
+SERVO_PIN = 22
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(LIGHT_PIN, GPIO.OUT)
+GPIO.setup(FAN_PIN, GPIO.OUT)
+GPIO.setup(SERVO_PIN, GPIO.OUT)
+
+# Test each device
+print("Testing Light...")
+GPIO.output(LIGHT_PIN, GPIO.HIGH)
+time.sleep(2)
+GPIO.output(LIGHT_PIN, GPIO.LOW)
+
+print("Testing Fan...")
+GPIO.output(FAN_PIN, GPIO.HIGH) 
+time.sleep(2)
+GPIO.output(FAN_PIN, GPIO.LOW)
+
+GPIO.cleanup()
+```
+
+**Common GPIO issues:**
+- Double-check wiring against the GPIO diagram
+- Use BCM pin numbers, not physical pin numbers
+- Check LED polarity (longer leg = positive)
+- Ensure 220Ω resistors for LEDs
+- Servo needs 5V power, not 3.3V
+- All components must share common ground
+
+**Test with multimeter:**
+- GPIO HIGH should show 3.3V
+- Check continuity of connections
+- Verify component values (resistors, etc.)
+</details><details>
 <summary><strong>SSH Issues</strong></summary>
 
 **"Host key verification failed" or "Remote host identification has changed":**
@@ -11,7 +70,7 @@ Then retry the SSH connection and accept the new host key when prompted.
 - Verify SSH is enabled: `sudo systemctl enable ssh`
 - Check if SSH service is running: `sudo systemctl status ssh`
 - Ensure you're using the correct IP address: `hostname -I`
-</details># 🏠 Simpson's House Smart Home Control #
+</details># 🏠 Simpson's House Smart Home Control
 
 A comprehensive smart home automation project that allows you to control LEDs, fans, and servos on a Raspberry Pi directly from an iOS Swift Playgrounds app using **MQTT over WebSocket**.
 
@@ -60,15 +119,85 @@ graph TD
 
 ### 1. Hardware Setup
 
-Wire your components using **BCM pin numbering**:
+#### 🔌 GPIO Pin Layout (BCM Numbering)
 
-| Device | BCM Pin | Component | Notes |
-|--------|---------|-----------|-------|
-| 💡 Living Room Light | 17 | LED + 220Ω resistor | Connect to GND |
-| 🌀 Ceiling Fan | 27 | LED or small fan | Use transistor for high current |
-| 🚪 Front Door | 22 | Servo motor | Signal pin; power from 5V/GND |
+```
+    3V3  (1) (2)  5V
+  GPIO2  (3) (4)  5V
+  GPIO3  (5) (6)  GND
+  GPIO4  (7) (8)  GPIO14
+    GND  (9) (10) GPIO15
+ GPIO17 (11) (12) GPIO18
+ GPIO27 (13) (14) GND
+ GPIO22 (15) (16) GPIO23
+    3V3 (17) (18) GPIO24
+ GPIO10 (19) (20) GND
+  GPIO9 (21) (22) GPIO25
+ GPIO11 (23) (24) GPIO8
+    GND (25) (26) GPIO7
+  GPIO0 (27) (28) GPIO1
+  GPIO5 (29) (30) GND
+  GPIO6 (31) (32) GPIO12
+ GPIO13 (33) (34) GND
+ GPIO19 (35) (36) GPIO16
+ GPIO26 (37) (38) GPIO20
+    GND (39) (40) GPIO21
+```
 
-> ⚠️ **Safety First**: Use appropriate drivers or relays for high-current loads.
+#### 🔧 Wiring Diagram
+
+**💡 Living Room Light (GPIO 17 - Pin 11):**
+```
+GPIO 17 (Pin 11) ──── 220Ω Resistor ──── LED (+) 
+                                         LED (-) ──── GND (Pin 9)
+```
+
+**🌀 Ceiling Fan (GPIO 27 - Pin 13):**
+```
+GPIO 27 (Pin 13) ──── 220Ω Resistor ──── LED (+)
+                                         LED (-) ──── GND (Pin 14)
+
+# For actual fan (with transistor):
+GPIO 27 (Pin 13) ──── 1kΩ Resistor ──── NPN Transistor Base
+                      Transistor Emitter ──── GND
+                      Transistor Collector ──── Fan (-)
+                      Fan (+) ──── 5V (Pin 4)
+```
+
+**🚪 Front Door Servo (GPIO 22 - Pin 15):**
+```
+GPIO 22 (Pin 15) ──── Servo Signal (Yellow/Orange)
+5V (Pin 4) ──────────── Servo VCC (Red)
+GND (Pin 6) ─────────── Servo GND (Brown/Black)
+```
+
+#### 📋 Component List
+
+| Component | Quantity | Notes |
+|-----------|----------|-------|
+| LED (any color) | 2 | For light and fan indication |
+| 220Ω Resistor | 2 | For LED current limiting |
+| Servo Motor (SG90) | 1 | Standard 3-wire servo |
+| Breadboard | 1 | For prototyping |
+| Jumper Wires | 10+ | Male-to-female recommended |
+| NPN Transistor (optional) | 1 | 2N2222 for real fan control |
+| 1kΩ Resistor (optional) | 1 | For transistor base |
+
+#### ⚠️ Safety Notes
+
+- **Double-check connections** before powering on
+- **Use appropriate resistors** to prevent LED burnout
+- **Never connect LEDs directly** to GPIO without resistors
+- **For high-current devices** (real fans), always use transistors or relays
+- **Servo power**: Use 5V pin, not 3.3V
+- **Common ground**: Ensure all components share the same ground
+
+#### 🔍 Pin Verification
+
+Use this command to see the physical pin layout:
+```bash
+pinout
+```
 
 ### 2. Raspberry Pi Setup
 
@@ -182,6 +311,131 @@ If you're in a corporate environment with FortiGate firewalls:
 - Choose 'n' for home networks
 
 ## 🧪 Testing & Verification
+
+### Test GPIO Pins Before MQTT Setup
+
+**Install GPIO utilities:**
+```bash
+sudo apt update
+sudo apt install -y wiringpi gpio-utils
+```
+
+**Test individual GPIO pins:**
+```bash
+# Test Light (GPIO 17)
+gpio mode 17 out
+gpio write 17 1  # Turn ON
+sleep 2
+gpio write 17 0  # Turn OFF
+
+# Test Fan (GPIO 27) 
+gpio mode 27 out
+gpio write 27 1  # Turn ON
+sleep 2
+gpio write 27 0  # Turn OFF
+
+# Test Servo (GPIO 22) - Basic test
+gpio mode 22 pwm
+gpio pwm 22 150  # Middle position
+sleep 2
+gpio pwm 22 50   # One direction
+sleep 2
+gpio pwm 22 250  # Other direction
+```
+
+**Python GPIO Test Script:**
+Create a test file to verify your wiring:
+```bash
+nano gpio_test.py
+```
+
+Copy this test script:
+```python
+#!/usr/bin/env python3
+import RPi.GPIO as GPIO
+import time
+
+# GPIO pins (BCM numbering)
+LIGHT_PIN = 17
+FAN_PIN = 27
+SERVO_PIN = 22
+
+def test_gpio():
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setwarnings(False)
+    
+    # Setup pins
+    GPIO.setup(LIGHT_PIN, GPIO.OUT)
+    GPIO.setup(FAN_PIN, GPIO.OUT)
+    GPIO.setup(SERVO_PIN, GPIO.OUT)
+    
+    # Setup servo PWM
+    servo_pwm = GPIO.PWM(SERVO_PIN, 50)  # 50Hz
+    servo_pwm.start(0)
+    
+    try:
+        print("🧪 Testing Simpson's House GPIO pins...")
+        
+        # Test Light
+        print("💡 Testing Light (GPIO 17)...")
+        GPIO.output(LIGHT_PIN, GPIO.HIGH)
+        print("   Light should be ON - Check your LED!")
+        time.sleep(3)
+        GPIO.output(LIGHT_PIN, GPIO.LOW)
+        print("   Light should be OFF")
+        time.sleep(1)
+        
+        # Test Fan
+        print("🌀 Testing Fan (GPIO 27)...")
+        GPIO.output(FAN_PIN, GPIO.HIGH)
+        print("   Fan should be ON - Check your LED/Fan!")
+        time.sleep(3)
+        GPIO.output(FAN_PIN, GPIO.LOW)
+        print("   Fan should be OFF")
+        time.sleep(1)
+        
+        # Test Servo
+        print("🚪 Testing Door Servo (GPIO 22)...")
+        print("   Servo moving to 0° (closed)")
+        servo_pwm.ChangeDutyCycle(2)  # 0 degrees
+        time.sleep(1)
+        servo_pwm.ChangeDutyCycle(0)
+        time.sleep(2)
+        
+        print("   Servo moving to 90° (open)")
+        servo_pwm.ChangeDutyCycle(7)  # 90 degrees
+        time.sleep(1)
+        servo_pwm.ChangeDutyCycle(0)
+        time.sleep(2)
+        
+        print("   Servo returning to 0° (closed)")
+        servo_pwm.ChangeDutyCycle(2)  # 0 degrees
+        time.sleep(1)
+        servo_pwm.ChangeDutyCycle(0)
+        
+        print("✅ GPIO test completed!")
+        print("   If devices didn't work, check your wiring!")
+        
+    except KeyboardInterrupt:
+        print("\n🛑 Test interrupted")
+    finally:
+        servo_pwm.stop()
+        GPIO.cleanup()
+        print("🧹 GPIO cleaned up")
+
+if __name__ == "__main__":
+    test_gpio()
+```
+
+**Run the GPIO test:**
+```bash
+python3 gpio_test.py
+```
+
+**Expected Results:**
+- **💡 Light LED**: Should turn ON for 3 seconds, then OFF
+- **🌀 Fan LED**: Should turn ON for 3 seconds, then OFF  
+- **🚪 Servo**: Should move from 0° to 90° and back to 0°
 
 ### Verify Services
 ```bash
@@ -300,8 +554,17 @@ ping 192.168.5.115  # From iOS device to Pi
 # Verify WebSocket listener
 telnet 192.168.5.115 9001
 
-# Monitor GPIO states (if gpio-utils installed)
-gpio readall
+# Monitor GPIO states in real-time
+watch -n 1 'gpio readall'
+
+# Test GPIO pins manually
+gpio write 17 1  # Turn on light
+gpio write 27 1  # Turn on fan
+gpio write 22 1  # Activate servo pin
+
+# Check MQTT message flow
+mosquitto_sub -h localhost -t home/# -v &
+mosquitto_pub -h localhost -t home/light -m ON
 ```
 
 ## 🔒 Security Considerations
