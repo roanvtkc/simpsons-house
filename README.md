@@ -3,60 +3,51 @@
 
 **Test GPIO pins before MQTT setup:**
 ```bash
-# Install GPIO utilities
-sudo apt install -y wiringpi gpio-utils
-
-# Test individual pins
-gpio mode 17 out
-gpio write 17 1  # Turn ON
-gpio write 17 0  # Turn OFF
-
-# Check pin states in real-time
-watch -n 1 'gpio readall'
+# Create and run the GPIO test script from above
+nano gpio_test.py
+# Copy the test script content, then:
+python3 gpio_test.py
 ```
 
-**Python GPIO test script:**
-```python
-#!/usr/bin/env python3
-import RPi.GPIO as GPIO
-import time
+**Manual GPIO testing (using filesystem interface):**
+```bash
+# Test Light (GPIO 17)
+echo 17 > /sys/class/gpio/export
+echo out > /sys/class/gpio/gpio17/direction
+echo 1 > /sys/class/gpio/gpio17/value  # Turn ON
+sleep 2
+echo 0 > /sys/class/gpio/gpio17/value  # Turn OFF
+echo 17 > /sys/class/gpio/unexport
+```
 
-# Test all GPIO pins
-LIGHT_PIN = 17
-FAN_PIN = 27
-SERVO_PIN = 22
+**Check GPIO status:**
+```bash
+# See pin layout
+pinout
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(LIGHT_PIN, GPIO.OUT)
-GPIO.setup(FAN_PIN, GPIO.OUT)
-GPIO.setup(SERVO_PIN, GPIO.OUT)
-
-# Test each device
-print("Testing Light...")
-GPIO.output(LIGHT_PIN, GPIO.HIGH)
-time.sleep(2)
-GPIO.output(LIGHT_PIN, GPIO.LOW)
-
-print("Testing Fan...")
-GPIO.output(FAN_PIN, GPIO.HIGH) 
-time.sleep(2)
-GPIO.output(FAN_PIN, GPIO.LOW)
-
-GPIO.cleanup()
+# Check what's using GPIO pins
+sudo fuser /dev/gpiomem
 ```
 
 **Common GPIO issues:**
 - Double-check wiring against the GPIO diagram
-- Use BCM pin numbers, not physical pin numbers
+- Use BCM pin numbers (17, 27, 22), not physical pin numbers (11, 13, 15)
 - Check LED polarity (longer leg = positive)
 - Ensure 220Ω resistors for LEDs
 - Servo needs 5V power, not 3.3V
 - All components must share common ground
 
 **Test with multimeter:**
-- GPIO HIGH should show 3.3V
+- GPIO HIGH should show 3.3V between pin and ground
 - Check continuity of connections
-- Verify component values (resistors, etc.)
+- Verify component values (resistors, LEDs, etc.)
+
+**Permission issues:**
+```bash
+# Add user to gpio group
+sudo usermod -a -G gpio pi
+# Logout and login again, or reboot
+```
 </details><details>
 <summary><strong>SSH Issues</strong></summary>
 
@@ -314,44 +305,19 @@ If you're in a corporate environment with FortiGate firewalls:
 
 ### Test GPIO Pins Before MQTT Setup
 
-**Install GPIO utilities:**
+**Create a simple GPIO test script:**
 ```bash
-sudo apt update
-sudo apt install -y wiringpi gpio-utils
-```
-
-**Test individual GPIO pins:**
-```bash
-# Test Light (GPIO 17)
-gpio mode 17 out
-gpio write 17 1  # Turn ON
-sleep 2
-gpio write 17 0  # Turn OFF
-
-# Test Fan (GPIO 27) 
-gpio mode 27 out
-gpio write 27 1  # Turn ON
-sleep 2
-gpio write 27 0  # Turn OFF
-
-# Test Servo (GPIO 22) - Basic test
-gpio mode 22 pwm
-gpio pwm 22 150  # Middle position
-sleep 2
-gpio pwm 22 50   # One direction
-sleep 2
-gpio pwm 22 250  # Other direction
-```
-
-**Python GPIO Test Script:**
-Create a test file to verify your wiring:
-```bash
+cd ~/simpsons-house
 nano gpio_test.py
 ```
 
-Copy this test script:
+**Copy this GPIO test script:**
 ```python
 #!/usr/bin/env python3
+"""
+Simpson's House GPIO Test Script
+Tests all GPIO pins to verify wiring before running MQTT system
+"""
 import RPi.GPIO as GPIO
 import time
 
@@ -361,6 +327,9 @@ FAN_PIN = 27
 SERVO_PIN = 22
 
 def test_gpio():
+    print("🏠 Simpson's House GPIO Test")
+    print("=" * 40)
+    
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
     
@@ -374,50 +343,59 @@ def test_gpio():
     servo_pwm.start(0)
     
     try:
-        print("🧪 Testing Simpson's House GPIO pins...")
+        print("🧪 Testing all devices...")
+        print("Watch your hardware and verify each device responds!")
+        print()
         
         # Test Light
-        print("💡 Testing Light (GPIO 17)...")
+        print("💡 Testing Living Room Light (GPIO 17)...")
+        print("   Light should turn ON now!")
         GPIO.output(LIGHT_PIN, GPIO.HIGH)
-        print("   Light should be ON - Check your LED!")
         time.sleep(3)
+        print("   Light should turn OFF now!")
         GPIO.output(LIGHT_PIN, GPIO.LOW)
-        print("   Light should be OFF")
         time.sleep(1)
         
         # Test Fan
-        print("🌀 Testing Fan (GPIO 27)...")
+        print("🌀 Testing Ceiling Fan (GPIO 27)...")
+        print("   Fan should turn ON now!")
         GPIO.output(FAN_PIN, GPIO.HIGH)
-        print("   Fan should be ON - Check your LED/Fan!")
         time.sleep(3)
+        print("   Fan should turn OFF now!")
         GPIO.output(FAN_PIN, GPIO.LOW)
-        print("   Fan should be OFF")
         time.sleep(1)
         
         # Test Servo
-        print("🚪 Testing Door Servo (GPIO 22)...")
-        print("   Servo moving to 0° (closed)")
+        print("🚪 Testing Front Door Servo (GPIO 22)...")
+        print("   Door closing (0°)...")
         servo_pwm.ChangeDutyCycle(2)  # 0 degrees
-        time.sleep(1)
-        servo_pwm.ChangeDutyCycle(0)
         time.sleep(2)
+        servo_pwm.ChangeDutyCycle(0)
         
-        print("   Servo moving to 90° (open)")
+        print("   Door opening (90°)...")
         servo_pwm.ChangeDutyCycle(7)  # 90 degrees
-        time.sleep(1)
-        servo_pwm.ChangeDutyCycle(0)
         time.sleep(2)
+        servo_pwm.ChangeDutyCycle(0)
         
-        print("   Servo returning to 0° (closed)")
+        print("   Door closing again (0°)...")
         servo_pwm.ChangeDutyCycle(2)  # 0 degrees
         time.sleep(1)
         servo_pwm.ChangeDutyCycle(0)
         
+        print()
         print("✅ GPIO test completed!")
-        print("   If devices didn't work, check your wiring!")
+        print("Did all devices respond correctly?")
+        print("- Light LED should have blinked")
+        print("- Fan LED should have blinked") 
+        print("- Servo should have moved back and forth")
+        print()
+        print("If any device didn't work, check your wiring!")
         
     except KeyboardInterrupt:
-        print("\n🛑 Test interrupted")
+        print("\n🛑 Test interrupted by user")
+    except Exception as e:
+        print(f"\n❌ Test failed: {e}")
+        print("Check your wiring and try again")
     finally:
         servo_pwm.stop()
         GPIO.cleanup()
@@ -430,6 +408,32 @@ if __name__ == "__main__":
 **Run the GPIO test:**
 ```bash
 python3 gpio_test.py
+```
+
+**Alternative: Manual GPIO Control (No extra packages needed)**
+```bash
+# Using the built-in GPIO filesystem interface
+# Test Light (GPIO 17)
+echo 17 > /sys/class/gpio/export
+echo out > /sys/class/gpio/gpio17/direction
+echo 1 > /sys/class/gpio/gpio17/value  # Turn ON
+sleep 2
+echo 0 > /sys/class/gpio/gpio17/value  # Turn OFF
+echo 17 > /sys/class/gpio/unexport
+
+# Test Fan (GPIO 27)
+echo 27 > /sys/class/gpio/export
+echo out > /sys/class/gpio/gpio27/direction
+echo 1 > /sys/class/gpio/gpio27/value  # Turn ON
+sleep 2
+echo 0 > /sys/class/gpio/gpio27/value  # Turn OFF
+echo 27 > /sys/class/gpio/unexport
+```
+
+**Check GPIO pin layout:**
+```bash
+# This command works on all Raspberry Pi OS versions
+pinout
 ```
 
 **Expected Results:**
