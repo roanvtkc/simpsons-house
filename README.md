@@ -11,7 +11,7 @@ Then retry the SSH connection and accept the new host key when prompted.
 - Verify SSH is enabled: `sudo systemctl enable ssh`
 - Check if SSH service is running: `sudo systemctl status ssh`
 - Ensure you're using the correct IP address: `hostname -I`
-</details># 🏠 Simpson's House Smart Home Control
+</details># 🏠 Simpson's House Smart Home Control #
 
 A comprehensive smart home automation project that allows you to control LEDs, fans, and servos on a Raspberry Pi directly from an iOS Swift Playgrounds app using **MQTT over WebSocket**.
 
