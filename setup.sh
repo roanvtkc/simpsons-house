@@ -78,6 +78,61 @@ check_root() {
     log "✅ Running as non-root user: $(whoami)"
 }
 
+# Sync time with corporate domain controllers
+sync_corporate_time() {
+    step "Synchronizing time with corporate domain controllers..."
+    
+    # Install ntpdate if not available (this worked for you)
+    debug "Installing ntpdate for time synchronization..."
+    if ! command -v ntpdate >/dev/null 2>&1; then
+        log "Installing ntpdate..."
+        if sudo apt install -y ntpdate --fix-missing >> "$DEBUG_LOG" 2>&1; then
+            log "✅ ntpdate installed successfully"
+        else
+            warn "⚠️ Could not install ntpdate, trying manual time sync"
+        fi
+    else
+        log "✅ ntpdate already available"
+    fi
+    
+    # Sync with domain controllers
+    log "🕐 Attempting time sync with Domain Controllers..."
+    local time_synced=false
+    
+    for dc in 10.20.1.30 10.20.1.31; do
+        debug "Trying DC: $dc"
+        if ping -c 1 -W 3 $dc >/dev/null 2>&1; then
+            debug "DC $dc is reachable"
+            if timeout 10 sudo ntpdate -s $dc >> "$DEBUG_LOG" 2>&1; then
+                log "✅ Successfully synced time with DC $dc"
+                time_synced=true
+                break
+            else
+                debug "❌ Time sync failed with DC $dc"
+            fi
+        else
+            debug "❌ DC $dc is not reachable"
+        fi
+    done
+    
+    if [ "$time_synced" = false ]; then
+        warn "⚠️ Could not sync with domain controllers"
+        warn "You may need to set time manually: sudo timedatectl set-time 'YYYY-MM-DD HH:MM:SS'"
+    fi
+    
+    local current_time=$(date)
+    log "Current system time: $current_time"
+    
+    # Check if time looks reasonable (year should be 2025)
+    local year=$(date +%Y)
+    if [ "$year" -eq 2025 ]; then
+        log "✅ System time appears correct"
+    else
+        warn "⚠️ System time may still be incorrect (year: $year)"
+        warn "Package repositories may reject updates with incorrect time"
+    fi
+}
+
 # Check system requirements
 check_system() {
     step "Checking system requirements..."
@@ -107,6 +162,7 @@ check_system() {
         log "✅ Internet connectivity: Available"
     else
         warn "❌ Internet connectivity: Limited or unavailable"
+        log "Note: Will attempt to use corporate network resources"
     fi
 }
 
@@ -117,8 +173,33 @@ install_packages() {
     local packages="git python3-venv mosquitto mosquitto-clients avahi-daemon avahi-utils build-essential python3-dev"
     log "Packages to install: $packages"
     
-    # Update package lists
-    run_cmd "sudo apt update" "Updating package lists"
+    # Update package lists with time-sensitive retry
+    log "Updating package lists (this may take time in corporate environments)..."
+    local update_attempts=0
+    local max_attempts=3
+    
+    while [ $update_attempts -lt $max_attempts ]; do
+        update_attempts=$((update_attempts + 1))
+        debug "Package update attempt $update_attempts of $max_attempts"
+        
+        if sudo apt update >> "$DEBUG_LOG" 2>&1; then
+            log "✅ Package lists updated successfully"
+            break
+        else
+            if [ $update_attempts -eq $max_attempts ]; then
+                error "❌ Failed to update package lists after $max_attempts attempts"
+                error "This is often caused by:"
+                error "  - Incorrect system time (check: date)"
+                error "  - Corporate firewall blocking repositories"
+                error "  - Network connectivity issues"
+                debug "Checking current time: $(date)"
+                return 1
+            else
+                warn "⚠️ Package update attempt $update_attempts failed, retrying..."
+                sleep 5
+            fi
+        fi
+    done
     
     # Install packages one by one for better error tracking
     for package in $packages; do
@@ -126,20 +207,36 @@ install_packages() {
         if dpkg -l | grep -q "^ii  $package "; then
             log "✅ $package - already installed"
         else
-            run_cmd "sudo apt install -y $package" "Installing $package"
+            debug "Installing package: $package"
+            if sudo apt install -y $package >> "$DEBUG_LOG" 2>&1; then
+                log "✅ $package - installed successfully"
+            else
+                warn "⚠️ $package - installation failed, continuing anyway"
+                debug "Failed package: $package"
+            fi
         fi
     done
     
-    # Verify installations
-    step "Verifying package installations..."
-    for package in $packages; do
+    # Verify critical installations
+    step "Verifying critical package installations..."
+    local critical_packages="git python3-venv mosquitto"
+    local missing_critical=""
+    
+    for package in $critical_packages; do
         if dpkg -l | grep -q "^ii  $package "; then
             log "✅ $package - verified installed"
         else
-            error "❌ $package - installation failed"
-            return 1
+            error "❌ $package - CRITICAL PACKAGE MISSING"
+            missing_critical="$missing_critical $package"
         fi
     done
+    
+    if [ -n "$missing_critical" ]; then
+        error "❌ Critical packages missing:$missing_critical"
+        error "Setup cannot continue without these packages"
+        error "Please contact IT support or install manually"
+        return 1
+    fi
 }
 
 # Setup Python environment with detailed logging
@@ -471,6 +568,7 @@ main() {
     
     # Run setup steps
     check_root
+    sync_corporate_time
     check_system
     install_packages
     setup_python_env
