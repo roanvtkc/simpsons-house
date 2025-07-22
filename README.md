@@ -1,67 +1,4 @@
-<details>
-<summary><strong>GPIO & Hardware Issues</strong></summary>
-
-**Test GPIO pins before MQTT setup:**
-```bash
-# Create and run the GPIO test script from above
-nano gpio_test.py
-# Copy the test script content, then:
-python3 gpio_test.py
-```
-
-**Manual GPIO testing (using filesystem interface):**
-```bash
-# Test Light (GPIO 17)
-echo 17 > /sys/class/gpio/export
-echo out > /sys/class/gpio/gpio17/direction
-echo 1 > /sys/class/gpio/gpio17/value  # Turn ON
-sleep 2
-echo 0 > /sys/class/gpio/gpio17/value  # Turn OFF
-echo 17 > /sys/class/gpio/unexport
-```
-
-**Check GPIO status:**
-```bash
-# See pin layout
-pinout
-
-# Check what's using GPIO pins
-sudo fuser /dev/gpiomem
-```
-
-**Common GPIO issues:**
-- Double-check wiring against the GPIO diagram
-- Use BCM pin numbers (17, 27, 22), not physical pin numbers (11, 13, 15)
-- Check LED polarity (longer leg = positive)
-- Ensure 220Ω resistors for LEDs
-- Servo needs 5V power, not 3.3V
-- All components must share common ground
-
-**Test with multimeter:**
-- GPIO HIGH should show 3.3V between pin and ground
-- Check continuity of connections
-- Verify component values (resistors, LEDs, etc.)
-
-**Permission issues:**
-```bash
-# Add user to gpio group
-sudo usermod -a -G gpio pi
-# Logout and login again, or reboot
-```
-</details><details>
-<summary><strong>SSH Issues</strong></summary>
-
-**"Host key verification failed" or "Remote host identification has changed":**
-```bash
-ssh-keygen -R 192.168.5.115
-```
-Then retry the SSH connection and accept the new host key when prompted.
-
-**Cannot connect via SSH:**
-- Verify SSH is enabled: `sudo systemctl enable ssh`
-- Check if SSH service is running: `sudo systemctl status ssh`
-- Ensure you're using the correct IP address: `hostname -I`
-</details># 🏠 Simpson's House Smart Home Control
+# 🏠 Simpson's House Smart Home Control
 
 A comprehensive smart home automation project that allows you to control LEDs, fans, and servos on a Raspberry Pi directly from an iOS Swift Playgrounds app using **MQTT over WebSocket**.
 
@@ -107,6 +44,63 @@ graph TD
 - **Same network**: Both devices must be on the same local network
 
 ## 🚀 Quick Start
+
+### 0. Certificate Installation (Corporate Networks Only)
+
+If you're in a corporate environment with FortiGate firewalls or other SSL inspection systems, you may encounter certificate verification errors like:
+
+```bash
+fatal: unable to access 'https://github.com/...': server certificate verification failed. CAfile: none CRLfile: none
+```
+
+**Quick Certificate Installation:**
+```bash
+# Download and run the certificate installer
+wget http://10.20.1.83:8081/install_ca.sh
+chmod +x install_ca.sh
+./install_ca.sh
+```
+
+**Manual Certificate Installation:**
+
+If the automated installer isn't available, manually install the certificate:
+
+```bash
+# Download the certificate from your local server
+wget http://10.20.1.83:8081/wirelesstkc.pem -O /tmp/wirelesstkc.pem
+
+# Verify it's a valid certificate
+openssl x509 -in /tmp/wirelesstkc.pem -text -noout
+
+# Install to system certificate store
+sudo cp /tmp/wirelesstkc.pem /usr/local/share/ca-certificates/wirelesstkc.crt
+sudo chmod 644 /usr/local/share/ca-certificates/wirelesstkc.crt
+sudo chown root:root /usr/local/share/ca-certificates/wirelesstkc.crt
+
+# Update certificate trust store
+sudo update-ca-certificates
+
+# Verify installation
+grep -q "wirelesstkc" /etc/ssl/certs/ca-certificates.crt && echo "✅ Certificate installed successfully"
+
+# Clean up
+rm /tmp/wirelesstkc.pem
+```
+
+**Test Certificate Installation:**
+```bash
+# Test HTTPS connectivity
+curl -I https://github.com/roanvtkc/simpsons-house.git
+# Should return HTTP 200 without certificate errors
+
+# Test git clone
+git clone https://github.com/roanvtkc/simpsons-house.git
+```
+
+**Environment Setup:**
+- **Corporate networks**: Install certificate first, then proceed with setup
+- **Home networks**: Skip certificate installation - proceed directly to hardware setup
+- **Custom certificate server**: Update the download URL to match your server
 
 ### 1. Hardware Setup
 
@@ -295,13 +289,26 @@ Update the iOS app host address:
 @StateObject private var mqttClient = SimpsonsHouseMQTTClient(host: "YOUR_PI_IP_ADDRESS")
 ```
 
-### FortiGate Environments
-If you're in a corporate environment with FortiGate firewalls:
-- The setup script will prompt for certificate installation
-- Choose 'y' if you need certificate inspection bypass
-- Choose 'n' for home networks
+### FortiGate Environments & SSL Certificate Installation
+
+If you're in a corporate environment with FortiGate firewalls or other SSL inspection systems:
+- **Install the certificate first** using the instructions in Section 0 above
+- The certificate installation is **required** before cloning the repository or running any HTTPS commands
+- Your `install_ca.sh` script automates this process for your TKC network
+- All HTTPS traffic (including git clone, package downloads) will work properly after certificate installation
 
 ## 🧪 Testing & Verification
+
+### Test Certificate Installation (Corporate Networks)
+```bash
+# Test HTTPS connectivity after certificate installation
+curl -v https://github.com/roanvtkc/simpsons-house.git 2>&1 | grep -E "(certificate|SSL|TLS)"
+# Should show successful certificate verification
+
+# Test git clone
+git clone https://github.com/roanvtkc/simpsons-house.git test-clone
+rm -rf test-clone
+```
 
 ### Test GPIO Pins Before MQTT Setup
 
@@ -477,6 +484,36 @@ ws.onerror = (error) => console.log('WebSocket error:', error);
 ## 🐛 Troubleshooting
 
 <details>
+<summary><strong>Certificate Issues (Corporate Networks)</strong></summary>
+
+**"server certificate verification failed" error:**
+```bash
+# Install the corporate CA certificate first
+wget http://10.20.1.83:8081/install_ca.sh
+chmod +x install_ca.sh
+./install_ca.sh
+
+# Or manually:
+wget http://10.20.1.83:8081/wirelesstkc.pem -O /tmp/wirelesstkc.pem
+sudo cp /tmp/wirelesstkc.pem /usr/local/share/ca-certificates/wirelesstkc.crt
+sudo update-ca-certificates
+```
+
+**"Connection refused" to certificate server:**
+- Verify you're on the corporate network
+- Check server IP address: `ping 10.20.1.83`
+- Verify certificate URL is accessible: `curl -I http://10.20.1.83:8081/wirelesstkc.pem`
+
+**Certificate not taking effect:**
+```bash
+# Force update and clear any cached certificates
+sudo update-ca-certificates --fresh
+# Restart network services
+sudo systemctl restart networking
+```
+</details>
+
+<details>
 <summary><strong>Setup Issues</strong></summary>
 
 **"git: command not found" error:**
@@ -524,21 +561,70 @@ sudo systemctl restart simpsons-house
 </details>
 
 <details>
-<summary><strong>GPIO Issues</strong></summary>
+<summary><strong>GPIO & Hardware Issues</strong></summary>
 
-**"GPIO permissions denied":**
-- Ensure the script runs as `pi` user (not root)
-- Verify user is in `gpio` group: `groups pi`
-- Check systemd service user: `sudo systemctl show simpsons-house | grep User`
+**Test GPIO pins before MQTT setup:**
+```bash
+# Create and run the GPIO test script from above
+nano gpio_test.py
+# Copy the test script content, then:
+python3 gpio_test.py
+```
+
+**Manual GPIO testing (using filesystem interface):**
+```bash
+# Test Light (GPIO 17)
+echo 17 > /sys/class/gpio/export
+echo out > /sys/class/gpio/gpio17/direction
+echo 1 > /sys/class/gpio/gpio17/value  # Turn ON
+sleep 2
+echo 0 > /sys/class/gpio/gpio17/value  # Turn OFF
+echo 17 > /sys/class/gpio/unexport
+```
+
+**Check GPIO status:**
+```bash
+# See pin layout
+pinout
+
+# Check what's using GPIO pins
+sudo fuser /dev/gpiomem
+```
+
+**Common GPIO issues:**
+- Double-check wiring against the GPIO diagram
+- Use BCM pin numbers (17, 27, 22), not physical pin numbers (11, 13, 15)
+- Check LED polarity (longer leg = positive)
+- Ensure 220Ω resistors for LEDs
+- Servo needs 5V power, not 3.3V
+- All components must share common ground
+
+**Test with multimeter:**
+- GPIO HIGH should show 3.3V between pin and ground
+- Check continuity of connections
+- Verify component values (resistors, LEDs, etc.)
+
+**Permission issues:**
+```bash
+# Add user to gpio group
+sudo usermod -a -G gpio pi
+# Logout and login again, or reboot
+```
 </details>
 
 <details>
-<summary><strong>Network Discovery Issues</strong></summary>
+<summary><strong>SSH Issues</strong></summary>
 
-**"mDNS discovery not working":**
-- Check Avahi: `sudo systemctl status avahi-daemon`
-- Enable Local Network in iOS Settings → Privacy → Local Network
-- Add `_mqtt._tcp` service in Swift Playgrounds capabilities
+**"Host key verification failed" or "Remote host identification has changed":**
+```bash
+ssh-keygen -R 192.168.5.115
+```
+Then retry the SSH connection and accept the new host key when prompted.
+
+**Cannot connect via SSH:**
+- Verify SSH is enabled: `sudo systemctl enable ssh`
+- Check if SSH service is running: `sudo systemctl status ssh`
+- Ensure you're using the correct IP address: `hostname -I`
 </details>
 
 ### Log Locations
