@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Simpson's House Complete Setup Script v3.0
+# Simpson's House Complete Setup Script v3.1
 # Sets up MQTT + WebSocket + GPIO control for iOS app communication
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -35,37 +35,18 @@ check_root() {
     fi
 }
 
-# Install FortiGate CA certificate (optional)
-install_ca_certificate() {
-    log "Checking if FortiGate CA certificate installation is needed..."
-    
-    # Ask user if they want to install the certificate
-    read -p "Are you in a FortiGate environment that requires certificate installation? (y/N): " -n 1 -r
-    echo
-    
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        log "Installing FortiGate CA certificate..."
-        if [ -f "$SCRIPT_DIR/install_ca.sh" ] && bash "$SCRIPT_DIR/install_ca.sh" 2>&1 | tee -a "$LOG_FILE"; then
-            log "CA certificate installed successfully"
-        else
-            warn "CA certificate installation failed or install_ca.sh not found"
-            warn "Continuing without certificate installation..."
-        fi
-    else
-        log "Skipping CA certificate installation"
-    fi
-}
-
 # Main setup function
 main() {
     log "🏠 Starting Simpson's House Complete Setup..."
     log "This will configure MQTT + WebSocket + GPIO control for iOS app"
     log "Setup log: $LOG_FILE"
     log ""
+    log "📋 Note: If you're in a corporate environment with SSL inspection,"
+    log "   run './install_ca.sh' first before proceeding with this setup."
+    log ""
     
     # Check prerequisites
     check_root
-    install_ca_certificate
     
     log "Updating package lists and installing dependencies..."
     sudo apt update
@@ -161,7 +142,7 @@ EOF
   <service>
     <type>_mqtt._tcp</type>
     <port>1883</port>
-    <txt-record>version=3.0</txt-record>
+    <txt-record>version=3.1</txt-record>
     <txt-record>device=simpsons_house</txt-record>
     <txt-record>websocket_port=9001</txt-record>
   </service>
@@ -291,6 +272,9 @@ EOF
     log "   🏠 Setup: $LOG_FILE"
     log "   📡 MQTT Listener: sudo journalctl -u simpsons-house -f"
     log "   🦟 Mosquitto: /var/log/mosquitto/mosquitto.log"
+    log ""
+    log "🔒 Corporate Networks:"
+    log "   If you encounter SSL certificate errors, run: ./install_ca.sh"
     log ""
     log "🎉 Simpson's House is now ready for iOS control!"
     log "Connect your iPhone/iPad and start controlling the house! 🏠✨"
