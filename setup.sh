@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-# Simpson's House Complete Setup Script v3.2 with L293D Motor Driver
+# Simpson's House Complete Setup Script v3.2 with ULN2003 Motor Driver
 # Sets up MQTT + WebSocket + GPIO control for iOS app communication
-# Now includes L293D motor driver for professional DC motor control
+# Now includes ULN2003 motor driver for professional stepper motor control
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="/tmp/simpsons_house_setup.log"
@@ -279,7 +279,7 @@ configure_mosquitto() {
     
     debug "Writing Mosquitto configuration..."
     sudo tee /etc/mosquitto/conf.d/01-simpsons-house.conf >/dev/null <<EOF
-# Simpson's House MQTT Configuration with L293D Motor Driver
+# Simpson's House MQTT Configuration with ULN2003 Motor Driver
 # TCP listener for standard MQTT clients
 listener 1883 0.0.0.0
 protocol mqtt
@@ -360,13 +360,13 @@ configure_avahi() {
 <?xml version="1.0" standalone='no'?>
 <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
 <service-group>
-  <name replace-wildcards="yes">Simpson's House MQTT Control with L293D</name>
+  <name replace-wildcards="yes">Simpson's House MQTT Control with ULN2003</name>
   <service>
     <type>_mqtt._tcp</type>
     <port>1883</port>
     <txt-record>version=3.2</txt-record>
     <txt-record>device=simpsons_house</txt-record>
-    <txt-record>motor_driver=l293d</txt-record>
+    <txt-record>motor_driver=ULN2003</txt-record>
     <txt-record>websocket_port=9001</txt-record>
   </service>
 </service-group>
@@ -390,7 +390,7 @@ setup_systemd_service() {
     debug "Creating systemd service file..."
     sudo tee /etc/systemd/system/simpsons-house.service >/dev/null <<EOF
 [Unit]
-Description=Simpson's House MQTT Listener and GPIO Controller with L293D Motor Driver
+Description=Simpson's House MQTT Listener and GPIO Controller with ULN2003 Motor Driver
 After=network.target mosquitto.service
 Requires=mosquitto.service
 StartLimitIntervalSec=0
@@ -459,7 +459,7 @@ test_mqtt() {
     step "Testing MQTT broker functionality..."
     
     debug "Testing MQTT publish..."
-    if mosquitto_pub -h localhost -t test/setup -m "Simpson's House L293D setup test $(date)" -q 0; then
+    if mosquitto_pub -h localhost -t test/setup -m "Simpson's House ULN2003 setup test $(date)" -q 0; then
         log "✅ MQTT publish test successful"
     else
         error "❌ MQTT publish test failed"
@@ -477,7 +477,7 @@ test_mqtt() {
 # Display comprehensive system information
 display_system_info() {
     log ""
-    log "=== Simpson's House System Information with L293D ==="
+    log "=== Simpson's House System Information with ULN2003 ==="
     
     # Get IP address
     local ip_address=$(hostname -I | awk '{print $1}')
@@ -490,23 +490,23 @@ display_system_info() {
         log "   $line"
     done
     
-    # Show GPIO configuration for L293D setup
-    log "🔧 L293D GPIO Pin Configuration (BCM numbering):"
+    # Show GPIO configuration for ULN2003 setup
+    log "🔧 ULN2003 GPIO Pin Configuration (BCM numbering):"
     log "   💡 Light (GPIO 17) - Pin 11 - LED + 220Ω resistor"
-    log "   🌀 L293D Motor Driver:"
-    log "      - Input1 (GPIO 27) - Pin 13 - Direction control"
-    log "      - Input2 (GPIO 18) - Pin 12 - Direction control"
-    log "      - Enable1 (GPIO 22) - Pin 15 - PWM speed control"
+    log "   🌀 ULN2003 Stepper Driver:"
+    log "      - IN1 (GPIO 27) - Pin 13"
+    log "      - IN2 (GPIO 18) - Pin 12"
+    log "      - IN3 (GPIO 22) - Pin 15"
+    log "      - IN4 (GPIO 24) - Pin 18"
     log "   🚪 Door Servo (GPIO 23) - Pin 16 - Servo motor"
     
-    # Show L293D wiring information
+    # Show ULN2003 wiring information
     log ""
-    log "🔌 L293D Wiring Requirements:"
-    log "   ⚡ Power: L293D Pin 16 (VCC) → Pi 5V (Pin 4)"
-    log "   ⚡ Motor Power: L293D Pin 8 (VMotor) → 9V Battery (+)"
-    log "   🔗 Ground: L293D Pins 4,5,12,13 → Pi GND + Battery (-)"
-    log "   🎛️  Control: Pi GPIO pins → L293D Input/Enable pins"
-    log "   🔧 Motor: DC Motor → L293D Output pins 3,6"
+    log "🔌 ULN2003 Wiring Requirements:"
+    log "   ⚡ Power: ULN2003 VCC → Pi 5V (Pin 4)"
+    log "   🔗 Ground: ULN2003 GND → Pi GND"
+    log "   🎛️  Control: Pi GPIO pins → ULN2003 IN1-IN4"
+    log "   🔧 Motor: Stepper motor connector → ULN2003 board"
     
     # Show service status
     log ""
@@ -518,9 +518,9 @@ display_system_info() {
     fi
     
     if sudo systemctl is-active --quiet simpsons-house; then
-        log "   ✅ Simpson's House L293D Controller - Running"
+        log "   ✅ Simpson's House ULN2003 Controller - Running"
     else
-        log "   ❌ Simpson's House L293D Controller - Stopped"
+        log "   ❌ Simpson's House ULN2003 Controller - Stopped"
     fi
     
     if sudo systemctl is-active --quiet avahi-daemon; then
@@ -543,13 +543,13 @@ display_system_info() {
     log "   🔌 WebSocket Port: 9001"
     log "   📨 MQTT Topics: home/light, home/fan, home/door"
     log ""
-    log "🎮 Device Controls with L293D:"
+    log "🎮 Device Controls with ULN2003:"
     log "   💡 Light: Send 'ON' or 'OFF' to home/light"
     log "   🌀 Motor: Send 'ON' (forward) or 'OFF' (stop) to home/fan"
     log "   🚪 Door: Send 'ON' (open) or 'OFF' (close) to home/door"
     log ""
     log "🔧 Hardware Testing:"
-    log "   🧪 Test L293D: python3 l293d_test.py"
+    log "   🧪 Test ULN2003: python3 ULN2003_test.py"
     log "   🧪 Test All GPIO: python3 gpio_test.py"
     log ""
     log "🔧 System Management Commands:"
@@ -564,10 +564,10 @@ display_system_info() {
     log "   📡 MQTT Listener: sudo journalctl -u simpsons-house -f"
     log "   🦟 Mosquitto: /var/log/mosquitto/mosquitto.log"
     log ""
-    log "⚠️  L293D Safety Notes:"
+    log "⚠️  ULN2003 Safety Notes:"
     log "   🔋 Always use external power supply for motor (9V battery)"
     log "   🔗 Ensure all grounds are connected together"
-    log "   🌡️  L293D IC may get warm during operation"
+    log "   🌡️  ULN2003 IC may get warm during operation"
     log "   🔧 Test motor direction before final assembly"
     log ""
     log "🔒 Corporate Networks:"
@@ -578,21 +578,21 @@ display_system_info() {
 # Main setup function
 main() {
     # Initialize logging
-    echo "Simpson's House Setup with L293D - $(date)" > "$LOG_FILE"
-    echo "Simpson's House Debug Log with L293D - $(date)" > "$DEBUG_LOG"
+    echo "Simpson's House Setup with ULN2003 - $(date)" > "$LOG_FILE"
+    echo "Simpson's House Debug Log with ULN2003 - $(date)" > "$DEBUG_LOG"
     
-    log "🏠 Starting Simpson's House Complete Setup v3.2 with L293D Motor Driver..."
-    log "This will configure MQTT + WebSocket + GPIO control + L293D for iOS app"
+    log "🏠 Starting Simpson's House Complete Setup v3.2 with ULN2003 Motor Driver..."
+    log "This will configure MQTT + WebSocket + GPIO control + ULN2003 for iOS app"
     log "Setup log: $LOG_FILE"
     log "Debug log: $DEBUG_LOG"
     log ""
-    log "🔧 NEW: Now includes L293D motor driver for professional DC motor control!"
+    log "🔧 NEW: Now includes ULN2003 motor driver for professional stepper motor control!"
     log "📋 Note: If you're in a corporate environment with SSL inspection,"
     log "   run './install_ca.sh' first before proceeding with this setup."
     log ""
     log "⚠️  Hardware Requirements:"
-    log "   • L293D Motor Driver IC (16-pin DIP)"
-    log "   • DC Motor (3-6V, ≤600mA)"
+    log "   • ULN2003 Motor Driver IC (16-pin DIP)"
+    log "   • stepper motor (3-6V, ≤600mA)"
     log "   • External 9V battery for motor power"
     log "   • Updated GPIO wiring per README.md"
     log ""
@@ -609,19 +609,19 @@ main() {
     test_mqtt
     display_system_info
     
-    log "🎉 Simpson's House with L293D setup completed successfully!"
-    log "🌀 Your DC motor is now ready for professional control!"
+    log "🎉 Simpson's House with ULN2003 setup completed successfully!"
+    log "🌀 Your stepper motor is now ready for professional control!"
     log "Connect your iPhone/iPad and start controlling the house! 🏠✨"
     log ""
     log "📋 Next Steps:"
-    log "   1. Test your L293D wiring: python3 l293d_test.py"
+    log "   1. Test your ULN2003 wiring: python3 ULN2003_test.py"
     log "   2. Test all GPIO pins: python3 gpio_test.py"
     log "   3. Connect your iOS app and enjoy motor control!"
     log ""
     log "📋 If you encounter any issues:"
     log "   1. Check the debug log: $DEBUG_LOG"
     log "   2. Check service logs: sudo journalctl -u simpsons-house -f"
-    log "   3. Verify L293D hardware connections match the GPIO configuration"
+    log "   3. Verify ULN2003 hardware connections match the GPIO configuration"
     log "   4. Ensure 9V battery is connected and charged"
 }
 

@@ -1,6 +1,6 @@
 # 🏠 Simpson's House Smart Home Control
 
-A comprehensive smart home automation project that allows you to control LEDs, DC motors via L293D driver, and servos on a Raspberry Pi directly from an iOS Swift Playgrounds app using **MQTT over WebSocket**.
+A comprehensive smart home automation project that allows you to control LEDs, stepper motors via ULN2003 driver, and servos on a Raspberry Pi directly from an iOS Swift Playgrounds app using **MQTT over WebSocket**.
 
 [![Status](https://img.shields.io/badge/Status-Smart%20Home%20Ready-brightgreen)](https://github.com/roanvtkc/simpsons-house)
 [![MQTT](https://img.shields.io/badge/MQTT-WebSocket%20Enabled-blue)](https://mqtt.org/)
@@ -15,8 +15,8 @@ A comprehensive smart home automation project that allows you to control LEDs, D
 - **🏠 Smart Home Control**: Complete home automation system inspired by The Simpsons
 - **📱 iOS App**: Beautiful SwiftUI interface built for Swift Playgrounds
 - **🌐 MQTT over WebSocket**: Modern, reliable communication protocol
-- **🔧 GPIO Control**: Direct hardware control of LEDs, DC motors, and servo motors
-- **⚙️ L293D Motor Driver**: Professional motor control with direction and speed
+- **🔧 GPIO Control**: Direct hardware control of LEDs, stepper motors, and servo motors
+- **⚙️ ULN2003 Motor Driver**: Professional motor control with direction and speed
 - **📡 Real-time Communication**: Instant response and status feedback
 - **🔄 Auto-reconnection**: Robust connection handling with keep-alive pings
 - **🕵️ mDNS Discovery**: Automatic network device discovery
@@ -31,7 +31,7 @@ graph TD
     C -->|GPIO| D[Raspberry Pi Hardware]
     
     D --> E[💡 Living Room Light<br/>GPIO 17]
-    D --> F[🌀 DC Motor via L293D<br/>GPIO 27, 18, 22]
+    D --> F[🌀 stepper motor via ULN2003<br/>GPIO 27, 18, 22, 24]
     D --> G[🚪 Front Door Servo<br/>GPIO 23]
 ```
 
@@ -41,7 +41,7 @@ graph TD
 - **SSH access** to the Pi (default credentials: `pi`/`tkcraspberry`)
 - **Git installed** on the Pi (will be installed automatically if missing)
 - **iOS device** with Swift Playgrounds 4+ or macOS with Xcode 13+
-- **Hardware components**: LEDs, resistors, L293D motor driver, DC motor, servo motor, breadboard
+- **Hardware components**: LEDs, resistors, ULN2003 motor driver, stepper motor, servo motor, breadboard
 - **External power supply**: 9V battery or adjustable power supply for motor
 - **Same network**: Both devices must be on the same local network
 
@@ -98,28 +98,16 @@ GPIO 17 (Pin 11) ──── 220Ω Resistor ──── LED (+)
                                          LED (-) ──── GND (Pin 9)
 ```
 
-**🌀 DC Motor with L293D Driver:**
+**🌀 Stepper Motor with ULN2003 Driver:**
 ```
-L293D Pin Layout (16-pin DIP):
-                ┌─────────┐
-    Enable1  1 │         │ 16  VCC (+5V from external supply)
-    Input1   2 │         │ 15  Input4
-    Output1  3 │         │ 14  Output4
-       GND   4 │ L293D   │ 13  GND
-       GND   5 │         │ 12  GND
-    Output2  6 │         │ 11  Output3
-    Input2   7 │         │ 10  Input3
-   VMotor    8 │         │  9  Enable2
-                └─────────┘
-
 Connections:
-GPIO 27 (Pin 13) ──── L293D Pin 2 (Input1)
-GPIO 18 (Pin 12) ──── L293D Pin 7 (Input2)  
-GPIO 22 (Pin 15) ──── L293D Pin 1 (Enable1)
-5V (Pin 4) ──────── L293D Pin 16 (VCC)
-External 9V+ ────── L293D Pin 8 (VMotor)
-GND (Pin 6) ─────── L293D Pins 4,5,12,13 (All GND)
-DC Motor ────────── L293D Pins 3,6 (Output1,Output2)
+GPIO 27 (Pin 13) ──── ULN2003 IN1
+GPIO 18 (Pin 12) ──── ULN2003 IN2
+GPIO 22 (Pin 15) ──── ULN2003 IN3
+GPIO 24 (Pin 18) ──── ULN2003 IN4
+5V (Pin 4) ────────── ULN2003 VCC
+GND (Pin 6) ───────── ULN2003 GND
+Stepper motor plugs into ULN2003 board via 5-pin connector
 ```
 
 **🚪 Front Door Servo (GPIO 23 - Pin 16):**
@@ -135,8 +123,8 @@ GND (Pin 6) ─────────── Servo GND (Brown/Black)
 |-----------|----------|-------|
 | LED (any color) | 1 | For light indication |
 | 220Ω Resistor | 1 | For LED current limiting |
-| L293D Motor Driver IC | 1 | 16-pin DIP package |
-| DC Motor (3-6V) | 1 | Small hobby motor |
+| ULN2003 Stepper Driver Board | 1 | For 28BYJ-48 stepper |
+| Stepper Motor (28BYJ-48) | 1 | 5V geared stepper |
 | Servo Motor (SG90) | 1 | Standard 3-wire servo |
 | Breadboard | 1 | For prototyping |
 | Jumper Wires | 15+ | Male-to-female recommended |
@@ -145,11 +133,11 @@ GND (Pin 6) ─────────── Servo GND (Brown/Black)
 
 #### ⚠️ Safety Notes
 
-- **External Power Required**: L293D motor driver requires external power supply (9V battery)
-- **Never use Pi power for motors**: High current draw can damage your Raspberry Pi
+- **Use External Power for Motors when needed**: The stepper motor is low power but large motors may require external supply
+- **Never use Pi power for high-current motors**
 - **Double-check connections** before powering on
 - **Use appropriate resistors** to prevent LED burnout
-- **L293D Heat**: IC may get warm during operation - ensure adequate ventilation
+- **Driver Heat**: ULN2003 may get warm during operation
 - **Motor Direction**: Test motor direction before final assembly
 - **Common Ground**: Pi GND and external power GND must be connected
 
@@ -225,7 +213,7 @@ The setup script will:
 | Topic | Description | Commands |
 |-------|-------------|----------|
 | `home/light` | Living room light control | `ON`, `OFF` |
-| `home/fan` | DC motor control via L293D | `ON` (forward), `OFF` (stop) |
+| `home/fan` | stepper motor control via ULN2003 | `ON` (forward), `OFF` (stop) |
 | `home/door` | Front door servo | `ON` (open), `OFF` (close) |
 
 ### Network Ports
@@ -259,18 +247,8 @@ Edit `mqttlistener.py` to change pin assignments:
 ```python
 # GPIO pin assignments (BCM numbering)
 LIGHT_PIN = 17     # Light control
-MOTOR_PIN1 = 27    # L293D Input1 (direction)
-MOTOR_PIN2 = 18    # L293D Input2 (direction)
-MOTOR_ENABLE = 22  # L293D Enable1 (PWM speed)
+STEPPER_PINS = [27, 18, 22, 24]  # Stepper IN1‑IN4
 SERVO_PIN = 23     # Servo control
-```
-
-### Motor Speed Control
-The L293D setup supports PWM speed control. Future updates can include:
-```python
-# Variable speed control (0-100%)
-def set_motor_speed(speed_percent):
-    motor_pwm.ChangeDutyCycle(speed_percent)
 ```
 
 ### Network Settings
@@ -286,106 +264,43 @@ Update the iOS app host address:
 **Create a simple GPIO test script:**
 ```bash
 cd ~/simpsons-house
-nano l293d_test.py
+nano stepper_test.py
 ```
 
-**Copy this L293D test script:**
+**Copy this stepper motor test script:**
 ```python
 #!/usr/bin/env python3
-"""
-Simpson's House L293D Motor Test Script
-Tests L293D motor driver and servo control
-"""
 import RPi.GPIO as GPIO
 import time
 
-# GPIO pins (BCM numbering)
-LIGHT_PIN = 17
-MOTOR_PIN1 = 27    # L293D Input1
-MOTOR_PIN2 = 18    # L293D Input2  
-MOTOR_ENABLE = 22  # L293D Enable1
-SERVO_PIN = 23
+STEPPER_PINS = [27, 18, 22, 24]
+SEQUENCE = [[1,0,0,1],[1,0,0,0],[1,1,0,0],[0,1,0,0],[0,1,1,0],[0,0,1,0],[0,0,1,1],[0,0,0,1]]
 
-def test_l293d_motor():
-    print("🏠 Simpson's House L293D Motor Test")
-    print("=" * 40)
-    
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setwarnings(False)
-    
-    # Setup pins
-    GPIO.setup(LIGHT_PIN, GPIO.OUT)
-    GPIO.setup(MOTOR_PIN1, GPIO.OUT)
-    GPIO.setup(MOTOR_PIN2, GPIO.OUT)
-    GPIO.setup(MOTOR_ENABLE, GPIO.OUT)
-    GPIO.setup(SERVO_PIN, GPIO.OUT)
-    
-    # Setup PWM for motor speed control
-    motor_pwm = GPIO.PWM(MOTOR_ENABLE, 1000)  # 1kHz
-    servo_pwm = GPIO.PWM(SERVO_PIN, 50)       # 50Hz
-    
-    try:
-        print("🧪 Testing all devices...")
-        
-        # Test Light
-        print("💡 Testing Light...")
-        GPIO.output(LIGHT_PIN, GPIO.HIGH)
-        time.sleep(2)
-        GPIO.output(LIGHT_PIN, GPIO.LOW)
-        
-        # Test Motor Forward
-        print("🌀 Testing Motor Forward...")
-        GPIO.output(MOTOR_PIN1, GPIO.HIGH)
-        GPIO.output(MOTOR_PIN2, GPIO.LOW)
-        motor_pwm.start(75)  # 75% speed
-        time.sleep(3)
-        motor_pwm.stop()
-        
-        # Test Motor Reverse
-        print("🔄 Testing Motor Reverse...")
-        GPIO.output(MOTOR_PIN1, GPIO.LOW)
-        GPIO.output(MOTOR_PIN2, GPIO.HIGH)
-        motor_pwm.start(75)  # 75% speed
-        time.sleep(3)
-        motor_pwm.stop()
-        
-        # Stop Motor
-        print("🛑 Stopping Motor...")
-        GPIO.output(MOTOR_PIN1, GPIO.LOW)
-        GPIO.output(MOTOR_PIN2, GPIO.LOW)
-        
-        # Test Servo
-        print("🚪 Testing Servo...")
-        servo_pwm.start(0)
-        servo_pwm.ChangeDutyCycle(2)   # 0 degrees
-        time.sleep(1)
-        servo_pwm.ChangeDutyCycle(7)   # 90 degrees
-        time.sleep(1)
-        servo_pwm.ChangeDutyCycle(2)   # 0 degrees
-        time.sleep(1)
-        servo_pwm.stop()
-        
-        print("✅ All tests completed!")
-        
-    except KeyboardInterrupt:
-        print("\n🛑 Test interrupted")
-    finally:
-        motor_pwm.stop()
-        servo_pwm.stop()
-        GPIO.cleanup()
+GPIO.setmode(GPIO.BCM)
+for pin in STEPPER_PINS:
+    GPIO.setup(pin, GPIO.OUT)
+    GPIO.output(pin, 0)
 
-if __name__ == "__main__":
-    test_l293d_motor()
+try:
+    for _ in range(512):
+        for pattern in SEQUENCE:
+            for pin, val in zip(STEPPER_PINS, pattern):
+                GPIO.output(pin, val)
+            time.sleep(0.002)
+finally:
+    for pin in STEPPER_PINS:
+        GPIO.output(pin, 0)
+    GPIO.cleanup()
 ```
 
-**Run the L293D test:**
+**Run the stepper test:**
 ```bash
-python3 l293d_test.py
+python3 stepper_test.py
 ```
 
 ### Expected Results:
 - **💡 Light LED**: Should turn ON for 2 seconds, then OFF
-- **🌀 DC Motor**: Should run forward for 3 seconds, then reverse for 3 seconds, then stop
+- **🌀 stepper motor**: Should run forward for 3 seconds, then reverse for 3 seconds, then stop
 - **🚪 Servo**: Should move from 0° to 90° and back to 0°
 
 ### Verify Services
@@ -416,24 +331,24 @@ mosquitto_pub -h localhost -t home/door -m ON   # Servo open
 ## 🐛 Troubleshooting
 
 <details>
-<summary><strong>L293D Motor Issues</strong></summary>
+<summary><strong>ULN2003 Motor Issues</strong></summary>
 
 **Motor not running:**
 - Check external power supply (9V battery connected?)
-- Verify L293D IC is properly seated in breadboard
+- Verify ULN2003 IC is properly seated in breadboard
 - Ensure all GND connections are made (Pi GND to external power GND)
 - Test with multimeter: Enable pin should show 3.3V when motor command is ON
 
 **Motor runs but wrong direction:**
 - Swap Input1 and Input2 connections (GPIO 27 and GPIO 18)
-- Or swap motor wires at L293D outputs
+- Or swap motor wires at ULN2003 outputs
 
 **Motor runs slowly:**
 - Check external power supply voltage (should be 6-12V)
 - Verify PWM duty cycle in code (should be 75-100% for full speed)
-- L293D may be overheating - check for adequate cooling
+- ULN2003 may be overheating - check for adequate cooling
 
-**L293D gets hot:**
+**ULN2003 gets hot:**
 - Normal operation - IC can get warm
 - Ensure adequate ventilation
 - Consider heat sink for continuous operation
@@ -452,7 +367,7 @@ pinout
 sudo fuser /dev/gpiomem
 ```
 
-**Manual L293D testing:**
+**Manual ULN2003 testing:**
 ```bash
 # Test motor control pins
 echo 27 > /sys/class/gpio/export
@@ -464,8 +379,8 @@ echo 1 > /sys/class/gpio/gpio22/value    # Enable motor
 # Motor should run - test with multimeter if needed
 ```
 
-**Common L293D wiring issues:**
-- Pin numbering: Ensure correct L293D pin identification
+**Common ULN2003 wiring issues:**
+- Pin numbering: Ensure correct ULN2003 pin identification
 - Power separation: 5V logic power vs. motor power (VMotor)
 - Ground loops: All grounds must be connected together
 - Enable pins: Must be HIGH for motor to run
@@ -493,9 +408,9 @@ echo 1 > /sys/class/gpio/gpio22/value    # Enable motor
 simpsons-house/
 ├── 📄 README.md                    # This file
 ├── 🔧 setup.sh                     # Automated setup script
-├── 🐍 mqttlistener.py               # Python MQTT listener with L293D control
+├── 🐍 mqttlistener.py               # Python MQTT listener with ULN2003 control
 ├── 🔐 install_ca.sh                # FortiGate certificate installer
-├── 🧪 l293d_test.py                # L293D motor test script
+├── 🧪 stepper_test.py                # Stepper motor test script
 ├── 📱 ios-app/                     # Swift Playgrounds app code
 │   └── ContentView.swift
 ├── 📋 systemd/                     # Systemd service files
@@ -533,7 +448,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] **Web dashboard** for browser control
 
 ### Version History
-- **v3.1** - L293D motor driver integration, improved motor control
+- **v3.1** - ULN2003 motor driver integration, improved motor control
 - **v3.0** - MQTT over WebSocket support, systemd integration
 - **v2.0** - Basic MQTT control with GPIO
 - **v1.0** - Initial HTTP-based control system
