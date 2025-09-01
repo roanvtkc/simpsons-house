@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Simpson's House MQTT Listener and GPIO Controller with Stepper Motor
+Simpson's House MQTT Listener and GPIO Controller with Variable Speed Stepper Motor
 Handles MQTT commands from iOS Swift Playgrounds app and controls Raspberry Pi GPIO
-Uses a 28BYJ-48 stepper motor driven by a ULN2003 board
+Uses a 28BYJ-48 stepper motor driven by a ULN2003 board with variable speed control
 """
 
 import paho.mqtt.client as mqtt
@@ -12,6 +12,7 @@ import logging
 import json
 import signal
 import sys
+import threading
 from datetime import datetime
 
 # ─── CONFIGURATION ─────────────────────────────────────────────────────────────
@@ -42,15 +43,21 @@ device_states = {
     "door": False
 }
 
-# Stepper motor state
+# Enhanced stepper motor state with speed control
 motor_state = {
     "running": False,
-    "position": 0  # cumulative steps moved
+    "position": 0,  # cumulative steps moved
+    "current_speed": 0,  # 0-100 percentage
+    "target_speed": 0,
+    "direction": "forward",
+    "step_delay": 0.002  # current delay between steps
 }
 
-# Global MQTT client and servo PWM object
+# Global objects
 client = None
 SERVO_PWM = None
+motor_thread = None
+motor_stop_event = threading.Event()
 
 # ─── LOGGING SETUP ──────────────────────────────────────────────────────────────
 
@@ -68,7 +75,7 @@ logger = logging.getLogger(__name__)
 
 def setup_gpio():
     """Initialize GPIO pins for Simpson's House devices with stepper motor."""
-    logger.info("🏠 Initializing Simpson's House GPIO with stepper motor...")
+    logger.info("🏠 Initializing Simpson's House GPIO with variable speed stepper motor...")
     
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
@@ -111,6 +118,8 @@ def set_servo_angle(angle: int) -> bool:
         logger.error(f"❌ Servo control failed: {e}")
         return False
 
+# ─── ENHANCED STEPPER MOTOR CONTROL ────────────────────────────────────────────
+
 STEP_SEQUENCE = [
     [1, 0, 0, 1],
     [1, 0, 0, 0],
@@ -122,25 +131,106 @@ STEP_SEQUENCE = [
     [0, 0, 0, 1]
 ]
 
-def stepper_step(sequence, steps, delay=0.002):
-    """Run the stepper motor for given steps using provided sequence."""
-    for _ in range(steps):
-        for pattern in sequence:
-            for pin, value in zip(STEPPER_PINS, pattern):
-                GPIO.output(pin, value)
-            time.sleep(delay)
-    stop_stepper()
+def speed_to_delay(speed_percent: int) -> float:
+    """Convert speed percentage (0-100) to step delay in seconds."""
+    if speed_percent <= 0:
+        return 0.1  # Very slow fallback
+    elif speed_percent >= 100:
+        return 0.001  # Maximum speed
+    else:
+        # Linear mapping: 100% = 0.001s, 1% = 0.02s
+        return 0.02 - (speed_percent / 100.0) * 0.019
 
-def rotate_stepper(direction: str, steps: int = 512):
-    """Rotate stepper motor in specified direction for steps."""
-    seq = STEP_SEQUENCE if direction == "forward" else list(reversed(STEP_SEQUENCE))
-    stepper_step(seq, steps)
-    motor_state["position"] += steps if direction == "forward" else -steps
+def stepper_continuous_run():
+    """Continuous stepper motor runner in separate thread."""
+    global motor_state
+    
+    logger.info("🌀 Stepper motor thread started")
+    step_index = 0
+    
+    while not motor_stop_event.is_set():
+        try:
+            if motor_state["running"] and motor_state["current_speed"] > 0:
+                # Get current step pattern
+                sequence = STEP_SEQUENCE if motor_state["direction"] == "forward" else list(reversed(STEP_SEQUENCE))
+                pattern = sequence[step_index % len(sequence)]
+                
+                # Apply step pattern to GPIO pins
+                for pin, value in zip(STEPPER_PINS, pattern):
+                    GPIO.output(pin, value)
+                
+                # Wait based on current speed
+                delay = motor_state["step_delay"]
+                if motor_stop_event.wait(timeout=delay):
+                    break  # Stop event was set
+                
+                # Update position and step index
+                step_index = (step_index + 1) % len(sequence)
+                if motor_state["direction"] == "forward":
+                    motor_state["position"] += 1
+                else:
+                    motor_state["position"] -= 1
+                    
+            else:
+                # Motor not running, wait a bit before checking again
+                if motor_stop_event.wait(timeout=0.1):
+                    break
+                    
+        except Exception as e:
+            logger.error(f"❌ Stepper motor thread error: {e}")
+            break
+    
+    # Ensure all pins are off when thread exits
+    stop_stepper_immediately()
+    logger.info("🛑 Stepper motor thread stopped")
 
-def stop_stepper():
+def start_stepper_thread():
+    """Start the stepper motor control thread."""
+    global motor_thread
+    if motor_thread is None or not motor_thread.is_alive():
+        motor_stop_event.clear()
+        motor_thread = threading.Thread(target=stepper_continuous_run, daemon=True)
+        motor_thread.start()
+        logger.info("🚀 Stepper motor control thread started")
+
+def stop_stepper_immediately():
+    """Immediately stop stepper motor and turn off all pins."""
     for pin in STEPPER_PINS:
         GPIO.output(pin, GPIO.LOW)
     motor_state["running"] = False
+    motor_state["current_speed"] = 0
+
+def set_stepper_speed(speed_percent: int) -> bool:
+    """Set stepper motor speed (0-100%)."""
+    try:
+        # Validate speed
+        if not 0 <= speed_percent <= 100:
+            logger.error(f"❌ Invalid speed: {speed_percent}%. Must be 0-100.")
+            return False
+        
+        logger.info(f"🌀 Setting stepper speed to {speed_percent}%")
+        
+        # Update motor state
+        motor_state["target_speed"] = speed_percent
+        motor_state["current_speed"] = speed_percent
+        motor_state["step_delay"] = speed_to_delay(speed_percent)
+        
+        if speed_percent == 0:
+            # Stop motor
+            motor_state["running"] = False
+            stop_stepper_immediately()
+            logger.info("🛑 Stepper motor stopped")
+        else:
+            # Start or update motor speed
+            motor_state["running"] = True
+            start_stepper_thread()
+            logger.info(f"🌀 Stepper motor running at {speed_percent}% speed (delay: {motor_state['step_delay']:.4f}s)")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Stepper speed control error: {e}")
+        return False
 
 # ─── MQTT EVENT HANDLERS ───────────────────────────────────────────────────────
 
@@ -156,7 +246,7 @@ def on_connect(client, userdata, flags, rc):
             logger.info(f"📡 Subscribed to: {topic}")
         
         # Publish initial system status
-        publish_system_status("online", "Simpson's House controller with stepper motor started")
+        publish_system_status("online", "Simpson's House controller with variable speed stepper motor started")
         
         # Publish initial device states
         for device, state in device_states.items():
@@ -180,32 +270,37 @@ def on_message(client, userdata, msg):
     """
     try:
         topic = msg.topic
-        payload = msg.payload.decode().strip().upper()
+        payload = msg.payload.decode().strip()
         
-        logger.info(f"📨 Received command: {topic} → {payload}")
+        logger.info(f"📨 Received MQTT message: {topic} → '{payload}'")
         
-        # Validate command
-        if payload not in ["ON", "OFF"]:
-            logger.warning(f"⚠️  Invalid command '{payload}' for {topic}")
-            publish_error(topic, f"Invalid command: {payload}")
-            return
-        
-        command_state = (payload == "ON")
         success = False
         device_name = ""
         
         # Execute command based on topic
         if topic == TOPIC_LIGHT:
-            success = control_light(command_state)
-            device_name = "Living Room Light"
+            if payload.upper() in ["ON", "OFF"]:
+                command_state = (payload.upper() == "ON")
+                success = control_light(command_state)
+                device_name = "Living Room Light"
+            else:
+                logger.warning(f"⚠️  Invalid light command '{payload}' for {topic}")
+                publish_error(topic, f"Invalid light command: {payload}")
+                return
             
         elif topic == TOPIC_FAN:
-            success = control_motor(command_state)
+            success = control_motor_with_speed(payload)
             device_name = "Stepper Motor"
             
         elif topic == TOPIC_DOOR:
-            success = control_door(command_state)
-            device_name = "Front Door"
+            if payload.upper() in ["ON", "OFF"]:
+                command_state = (payload.upper() == "ON")
+                success = control_door(command_state)
+                device_name = "Front Door"
+            else:
+                logger.warning(f"⚠️  Invalid door command '{payload}' for {topic}")
+                publish_error(topic, f"Invalid door command: {payload}")
+                return
             
         else:
             logger.warning(f"⚠️  Unknown topic: {topic}")
@@ -214,13 +309,20 @@ def on_message(client, userdata, msg):
         # Update device state and publish status
         if success:
             device_key = topic.split('/')[-1]  # Extract device name from topic
-            device_states[device_key] = command_state
             
-            publish_device_status(device_key, command_state)
-            logger.info(f"✅ {device_name} successfully turned {'ON' if command_state else 'OFF'}")
+            # Update device states appropriately
+            if topic == TOPIC_LIGHT:
+                device_states[device_key] = (payload.upper() == "ON")
+            elif topic == TOPIC_FAN:
+                device_states[device_key] = motor_state["running"]
+            elif topic == TOPIC_DOOR:
+                device_states[device_key] = (payload.upper() == "ON")
+            
+            publish_device_status(device_key, device_states[device_key])
+            logger.info(f"✅ {device_name} command '{payload}' executed successfully")
         else:
-            logger.error(f"❌ Failed to control {device_name}")
-            publish_error(topic, f"Device control failed")
+            logger.error(f"❌ Failed to control {device_name} with command '{payload}'")
+            publish_error(topic, f"Device control failed for command: {payload}")
             
     except Exception as e:
         logger.error(f"❌ Message handling error: {e}")
@@ -239,18 +341,37 @@ def control_light(state: bool) -> bool:
         logger.error(f"❌ Light control error: {e}")
         return False
 
-def control_motor(state: bool) -> bool:
-    """Control the stepper motor via ULN2003 driver."""
+def control_motor_with_speed(command: str) -> bool:
+    """
+    Control the stepper motor with speed commands.
+    Accepts: ON, OFF, SPEED:X (where X is 0-100)
+    """
     try:
-        if state:
-            logger.info("🌀 Rotating stepper motor forward...")
-            motor_state["running"] = True
-            rotate_stepper("forward", 512)
-            motor_state["running"] = False
-        else:
+        command = command.upper().strip()
+        logger.info(f"🌀 Processing stepper motor command: '{command}'")
+        
+        if command == "OFF":
             logger.info("🛑 Stopping stepper motor...")
-            stop_stepper()
-        return True
+            return set_stepper_speed(0)
+            
+        elif command == "ON":
+            logger.info("🌀 Starting stepper motor at default speed (50%)...")
+            return set_stepper_speed(50)
+            
+        elif command.startswith("SPEED:"):
+            # Parse speed value
+            try:
+                speed_str = command[6:]  # Remove "SPEED:" prefix
+                speed_value = int(speed_str)
+                logger.info(f"🌀 Setting stepper motor to {speed_value}% speed...")
+                return set_stepper_speed(speed_value)
+            except ValueError:
+                logger.error(f"❌ Invalid speed value in command: '{command}'. Expected SPEED:X where X is 0-100")
+                return False
+        else:
+            logger.warning(f"⚠️  Unknown stepper motor command: '{command}'. Valid commands: ON, OFF, SPEED:X")
+            return False
+            
     except Exception as e:
         logger.error(f"❌ Stepper motor control error: {e}")
         return False
@@ -275,7 +396,8 @@ def stop_motor_emergency():
     """Emergency stop for motor - cuts power immediately."""
     try:
         logger.warning("🚨 EMERGENCY MOTOR STOP")
-        stop_stepper()
+        motor_stop_event.set()
+        stop_stepper_immediately()
     except Exception as e:
         logger.error(f"❌ Emergency stop failed: {e}")
 
@@ -283,8 +405,13 @@ def get_motor_status() -> dict:
     """Get current stepper motor status for diagnostics."""
     return {
         "running": motor_state["running"],
+        "current_speed": motor_state["current_speed"],
+        "target_speed": motor_state["target_speed"],
         "position": motor_state["position"],
-        "gpio_states": {f"pin{idx+1}": GPIO.input(pin) for idx, pin in enumerate(STEPPER_PINS)}
+        "direction": motor_state["direction"],
+        "step_delay": motor_state["step_delay"],
+        "gpio_states": {f"pin{idx+1}": GPIO.input(pin) for idx, pin in enumerate(STEPPER_PINS)},
+        "thread_alive": motor_thread.is_alive() if motor_thread else False
     }
 
 # ─── MQTT PUBLISHING FUNCTIONS ─────────────────────────────────────────────────
@@ -298,11 +425,12 @@ def publish_device_status(device: str, status: bool):
         # Publish individual device status
         client.publish(status_topic, status_msg, retain=True)
         
-        # Include motor diagnostics for fan status
+        # Include detailed motor diagnostics for fan status
         if device == "fan":
             motor_status = get_motor_status()
             motor_status_topic = f"home/{device}/motor_status"
             client.publish(motor_status_topic, json.dumps(motor_status), retain=True)
+            logger.info(f"📊 Motor status published: Speed={motor_status['current_speed']}%, Running={motor_status['running']}")
         
         # Publish comprehensive system status
         system_status = {
@@ -323,9 +451,10 @@ def publish_system_status(status: str, message: str = ""):
             "status": status,
             "timestamp": datetime.now().isoformat(),
             "message": message,
-            "version": "3.1",
-            "controller": "Simpson's House GPIO Controller with Stepper Motor",
+            "version": "3.2",
+            "controller": "Simpson's House GPIO Controller with Variable Speed Stepper Motor",
             "motor_driver": "ULN2003",
+            "motor_features": "Variable speed 0-100%",
             "gpio_pins": {
                 "light": LIGHT_PIN,
                 "stepper": STEPPER_PINS,
@@ -379,10 +508,15 @@ def cleanup_and_exit():
         logger.info("🚨 Emergency stopping motor...")
         stop_motor_emergency()
         
+        # Wait for motor thread to finish
+        if motor_thread and motor_thread.is_alive():
+            motor_stop_event.set()
+            motor_thread.join(timeout=2.0)
+        
         # Turn off all devices safely
         logger.info("🔌 Turning off all devices...")
         GPIO.output(LIGHT_PIN, GPIO.LOW)
-        stop_stepper()
+        stop_stepper_immediately()
 
         # Stop PWM and cleanup GPIO
         if SERVO_PWM:
@@ -412,8 +546,8 @@ def main():
     """Main function to run Simpson's House MQTT listener."""
     global client
     
-    logger.info("🏠 Starting Simpson's House Smart Home Controller v3.1")
-    logger.info("🔧 Now with stepper motor support!")
+    logger.info("🏠 Starting Simpson's House Smart Home Controller v3.2")
+    logger.info("🔧 Now with VARIABLE SPEED stepper motor support!")
     logger.info("📺 'D'oh! Welcome to the smartest house in Springfield!'")
     
     # Register signal handlers for graceful shutdown
@@ -425,7 +559,7 @@ def main():
         setup_gpio()
         
         # Create and configure MQTT client
-        client = mqtt.Client(client_id="simpsons_house_stepper_controller")
+        client = mqtt.Client(client_id="simpsons_house_variable_speed_controller")
         client.on_connect = on_connect
         client.on_disconnect = on_disconnect
         client.on_message = on_message
@@ -443,9 +577,12 @@ def main():
         client.connect(BROKER_HOST, BROKER_PORT, KEEPALIVE)
         
         # Start MQTT message loop
-        logger.info("🎮 Simpson's House with stepper motor control ready!")
+        logger.info("🎮 Simpson's House with variable speed stepper motor control ready!")
         logger.info("📱 Connect your iPhone/iPad and start controlling the house!")
-        logger.info("🌀 Stepper control: ON=Forward rotation, OFF=Stop")
+        logger.info("🌀 Stepper control commands:")
+        logger.info("   • OFF - Stop motor")
+        logger.info("   • ON - Start at 50% speed")
+        logger.info("   • SPEED:X - Set speed to X% (0-100)")
         client.loop_forever()
         
     except KeyboardInterrupt:
