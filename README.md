@@ -8,8 +8,6 @@ A comprehensive smart home automation project that allows you to control LEDs, s
 [![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi-red)](https://www.raspberrypi.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-
-![Simpsons House Project](cover.png)
 <p align="center">
   <img src="cover.png" alt="Simpsons House Project" width="740">
 </p>
