@@ -10,6 +10,10 @@ A comprehensive smart home automation project that allows you to control LEDs, s
 
 
 ![Simpsons House Project](cover.png)
+<p align="center">
+  <img src="cover.png" alt="Simpsons House Project" width="740">
+</p>
+
 
 
 ## ✨ Features
