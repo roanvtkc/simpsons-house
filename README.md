@@ -9,7 +9,7 @@ A comprehensive smart home automation project that allows you to control LEDs, s
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 <p align="center">
-  <img src="cover.png" alt="Simpsons House Project" width="740">
+  <img src="cover.png" alt="Simpsons House Project" width="680">
 </p>
 
 
