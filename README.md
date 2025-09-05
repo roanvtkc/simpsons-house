@@ -109,8 +109,8 @@ GPIO 27 (Pin 13) ──── ULN2003 IN1
 GPIO 18 (Pin 12) ──── ULN2003 IN2
 GPIO 22 (Pin 15) ──── ULN2003 IN3
 GPIO 24 (Pin 18) ──── ULN2003 IN4
-5V (Pin 4) ────────── ULN2003 VCC
-GND (Pin 6) ───────── ULN2003 GND
+5V (Pin 2) ────────── ULN2003 VCC
+GND (Pin 14) ───────── ULN2003 GND
 Stepper motor plugs into ULN2003 board via 5-pin connector
 ```
 
