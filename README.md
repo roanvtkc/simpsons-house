@@ -1,6 +1,6 @@
 # 🏠 Simpson's House Smart Home Control
 
-A comprehensive smart home automation project that allows you to control LEDs, stepper motors via ULN2003 driver, and servos on a Raspberry Pi directly from an iOS Swift Playgrounds app using **MQTT over WebSocket**.
+A comprehensive smart home automation project that allows you to control LEDs, a garage door opener driven by a stepper motor via ULN2003 driver, and servos on a Raspberry Pi directly from an iOS Swift Playgrounds app using **MQTT over WebSocket**.
 
 [![Status](https://img.shields.io/badge/Status-Smart%20Home%20Ready-brightgreen)](https://github.com/roanvtkc/simpsons-house)
 [![MQTT](https://img.shields.io/badge/MQTT-WebSocket%20Enabled-blue)](https://mqtt.org/)
@@ -19,7 +19,7 @@ A comprehensive smart home automation project that allows you to control LEDs, s
 - **🏠 Smart Home Control**: Complete home automation system inspired by The Simpsons
 - **📱 iOS App**: Beautiful SwiftUI interface built for Swift Playgrounds
 - **🌐 MQTT over WebSocket**: Modern, reliable communication protocol
-- **🔧 GPIO Control**: Direct hardware control of LEDs, stepper motors, and servo motors
+- **🔧 GPIO Control**: Direct hardware control of LEDs, a garage door stepper motor, and servo motors
 - **⚙️ ULN2003 Motor Driver**: Professional motor control with direction and speed
 - **📡 Real-time Communication**: Instant response and status feedback
 - **🔄 Auto-reconnection**: Robust connection handling with keep-alive pings
@@ -35,7 +35,7 @@ graph TD
     C -->|GPIO| D[Raspberry Pi Hardware]
     
     D --> E[💡 Living Room Light<br/>GPIO 17]
-    D --> F[🌀 stepper motor via ULN2003<br/>GPIO 27, 18, 22, 24]
+    D --> F[🚗 Garage Door Opener via ULN2003<br/>GPIO 27, 18, 22, 24]
     D --> G[🚪 Front Door Servo<br/>GPIO 23]
 ```
 
@@ -45,7 +45,7 @@ graph TD
 - **SSH access** to the Pi (default credentials: `pi`/`tkcraspberry`)
 - **Git installed** on the Pi (will be installed automatically if missing)
 - **iOS device** with Swift Playgrounds 4+ or macOS with Xcode 13+
-- **Hardware components**: LEDs, resistors, ULN2003 motor driver, stepper motor, servo motor, breadboard
+- **Hardware components**: LEDs, resistors, ULN2003 driver with 28BYJ-48 stepper motor for the garage door opener, servo motor, breadboard
 - **External power supply**: 9V battery or adjustable power supply for motor
 - **Same network**: Both devices must be on the same local network
 
@@ -102,7 +102,7 @@ GPIO 17 (Pin 11) ──── 220Ω Resistor ──── LED (+)
                                          LED (-) ──── GND (Pin 9)
 ```
 
-**🌀 Stepper Motor with ULN2003 Driver:**
+**🚗 Garage Door Stepper Motor with ULN2003 Driver:**
 ```
 Connections:
 GPIO 27 (Pin 13) ──── ULN2003 IN1
@@ -111,7 +111,7 @@ GPIO 22 (Pin 15) ──── ULN2003 IN3
 GPIO 24 (Pin 18) ──── ULN2003 IN4
 5V (Pin 2) ────────── ULN2003 VCC
 GND (Pin 14) ───────── ULN2003 GND
-Stepper motor plugs into ULN2003 board via 5-pin connector
+Stepper motor plugs into ULN2003 board via 5-pin connector to drive the garage door
 ```
 
 **🚪 Front Door Servo (GPIO 23 - Pin 16):**
@@ -127,8 +127,8 @@ GND (Pin 6) ─────────── Servo GND (Brown/Black)
 |-----------|----------|-------|
 | LED (any color) | 1 | For light indication |
 | 220Ω Resistor | 1 | For LED current limiting |
-| ULN2003 Stepper Driver Board | 1 | For 28BYJ-48 stepper |
-| Stepper Motor (28BYJ-48) | 1 | 5V geared stepper |
+| ULN2003 Stepper Driver Board | 1 | Drives garage door stepper |
+| Stepper Motor (28BYJ-48) | 1 | 5V geared stepper for garage door |
 | Servo Motor (SG90) | 1 | Standard 3-wire servo |
 | Breadboard | 1 | For prototyping |
 | Jumper Wires | 15+ | Male-to-female recommended |
@@ -199,9 +199,9 @@ The setup script will:
 
 ### Device Controls
 - **💡 Living Room Light**: Toggle the main lighting
-- **🌀 Ceiling Fan**: Control motor with direction and speed
-  - `ON`: Motor runs forward at full speed
-  - `OFF`: Motor stops
+- **🚗 Garage Door**: Open and close using the stepper motor
+  - `OPEN`: Turn motor to open the door
+  - `CLOSE`: Turn motor to close the door
   - Future: Variable speed control via PWM
 - **🚪 Front Door**: Operate the servo-controlled entrance
 
@@ -217,7 +217,7 @@ The setup script will:
 | Topic | Description | Commands |
 |-------|-------------|----------|
 | `home/light` | Living room light control | `ON`, `OFF` |
-| `home/fan` | stepper motor control via ULN2003 | `ON` (forward), `OFF` (stop) |
+| `home/garage` | garage door opener via ULN2003 | `OPEN`, `CLOSE` |
 | `home/door` | Front door servo | `ON` (open), `OFF` (close) |
 
 ### Network Ports
@@ -240,7 +240,7 @@ sudo systemctl restart mosquitto
 
 # Test MQTT manually
 mosquitto_pub -h localhost -t home/light -m ON
-mosquitto_pub -h localhost -t home/fan -m ON
+mosquitto_pub -h localhost -t home/garage -m OPEN
 mosquitto_sub -h localhost -t home/# -v
 ```
 
@@ -297,14 +297,14 @@ finally:
     GPIO.cleanup()
 ```
 
-**Run the stepper test:**
+**Run the garage door stepper test:**
 ```bash
 python3 stepper_test.py
 ```
 
 ### Expected Results:
 - **💡 Light LED**: Should turn ON for 2 seconds, then OFF
-- **🌀 stepper motor**: Should run forward for 3 seconds, then reverse for 3 seconds, then stop
+- **🚗 Garage door stepper motor**: Should run forward for 3 seconds, then reverse for 3 seconds, then stop
 - **🚪 Servo**: Should move from 0° to 90° and back to 0°
 
 ### Verify Services
@@ -327,8 +327,8 @@ avahi-browse -rt _mqtt._tcp
 ```bash
 # Test individual devices
 mosquitto_pub -h localhost -t home/light -m ON
-mosquitto_pub -h localhost -t home/fan -m ON    # Motor forward
-mosquitto_pub -h localhost -t home/fan -m OFF   # Motor stop
+mosquitto_pub -h localhost -t home/garage -m OPEN   # Open garage door
+mosquitto_pub -h localhost -t home/garage -m CLOSE  # Close garage door
 mosquitto_pub -h localhost -t home/door -m ON   # Servo open
 ```
 
@@ -414,7 +414,7 @@ simpsons-house/
 ├── 🔧 setup.sh                     # Automated setup script
 ├── 🐍 mqttlistener.py               # Python MQTT listener with ULN2003 control
 ├── 🔐 install_ca.sh                # FortiGate certificate installer
-├── 🧪 stepper_test.py                # Stepper motor test script
+├── 🧪 stepper_test.py                # Garage door stepper motor test script
 ├── 📱 ios-app/                     # Swift Playgrounds app code
 │   └── ContentView.swift
 ├── 📋 systemd/                     # Systemd service files
