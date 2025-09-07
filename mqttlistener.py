@@ -516,14 +516,24 @@ def main():
         logger.info(f"📡 Connecting to MQTT broker at {BROKER_HOST}:{BROKER_PORT}")
         client.connect(BROKER_HOST, BROKER_PORT, KEEPALIVE)
         
-        # Start MQTT message loop
+        # Start MQTT message loop with motor stepping
         logger.info("🎮 Simpson's House with continuous stepper motor control ready!")
         logger.info("📱 Connect your iPhone/iPad and start controlling the house!")
         logger.info("🌀 Stepper control commands:")
         logger.info("   • OFF - Stop motor")
         logger.info("   • ON - Run continuously at 50% speed")
         logger.info("   • SPEED:X - Run continuously at X% speed (0-100)")
-        client.loop_forever()
+        
+        # Non-blocking loop that can handle MQTT and motor stepping
+        while True:
+            # Process MQTT messages with short timeout
+            client.loop(timeout=0.001)  # 1ms timeout
+            
+            # Step motor if needed
+            step_motor_if_needed()
+            
+            # Small delay to prevent excessive CPU usage
+            time.sleep(0.0001)  # 0.1ms delay
         
     except KeyboardInterrupt:
         logger.info("⌨️  Interrupted by user")
