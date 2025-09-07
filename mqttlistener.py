@@ -517,12 +517,12 @@ def main():
         client.connect(BROKER_HOST, BROKER_PORT, KEEPALIVE)
         
         # Start MQTT message loop
-        logger.info("🎮 Simpson's House with simplified stepper motor control ready!")
+        logger.info("🎮 Simpson's House with continuous stepper motor control ready!")
         logger.info("📱 Connect your iPhone/iPad and start controlling the house!")
         logger.info("🌀 Stepper control commands:")
         logger.info("   • OFF - Stop motor")
-        logger.info("   • ON - Run at 50% speed")
-        logger.info("   • SPEED:X - Run at X% speed (0-100)")
+        logger.info("   • ON - Run continuously at 50% speed")
+        logger.info("   • SPEED:X - Run continuously at X% speed (0-100)")
         client.loop_forever()
         
     except KeyboardInterrupt:
