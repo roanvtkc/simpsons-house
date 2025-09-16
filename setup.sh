@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Simpson's House Complete Setup Script v3.2 with ULN2003 Motor Driver
+# Simpson's House Complete Setup Script v3.6 with WebSocket Fix
 # Sets up MQTT + WebSocket + GPIO control for iOS app communication
 # Now includes ULN2003 motor driver for professional stepper motor control
 
@@ -270,25 +270,39 @@ setup_python_env() {
     python -c "import RPi.GPIO as GPIO; print('RPi.GPIO imported successfully')" >> "$DEBUG_LOG" 2>&1 && log "✅ RPi.GPIO - verified" || error "❌ RPi.GPIO - import failed"
 }
 
-# Configure Mosquitto with detailed logging
+# Configure Mosquitto with detailed logging and WebSocket fix
 configure_mosquitto() {
-    step "Configuring Mosquitto MQTT broker..."
+    step "Configuring Mosquitto MQTT broker with WebSocket support..."
     
     debug "Creating Mosquitto configuration directory..."
     sudo mkdir -p /etc/mosquitto/conf.d
     
-    debug "Writing Mosquitto configuration..."
-    sudo tee /etc/mosquitto/conf.d/01-simpsons-house.conf >/dev/null <<EOF
-# Simpson's House MQTT Configuration with ULN2003 Motor Driver
-# TCP listener for standard MQTT clients
+    # IMPORTANT: Disable the default mosquitto.conf to avoid conflicts
+    debug "Backing up and disabling default mosquitto.conf..."
+    if [ -f "/etc/mosquitto/mosquitto.conf" ]; then
+        sudo cp /etc/mosquitto/mosquitto.conf /etc/mosquitto/mosquitto.conf.backup
+        sudo bash -c 'echo "# Default config disabled - using conf.d instead" > /etc/mosquitto/mosquitto.conf'
+        sudo bash -c 'echo "include_dir /etc/mosquitto/conf.d" >> /etc/mosquitto/mosquitto.conf'
+    fi
+    
+    debug "Writing comprehensive Mosquitto configuration with WebSocket support..."
+    sudo tee /etc/mosquitto/conf.d/01-simpsons-house.conf >/dev/null <<'EOF'
+# Simpson's House MQTT Configuration with WebSocket Support
+# FIXED VERSION - Ensures both TCP and WebSocket listeners work
+
+# TCP listener for standard MQTT clients (Python, mosquitto_pub/sub)
 listener 1883 0.0.0.0
 protocol mqtt
 allow_anonymous true
 
-# WebSocket listener for iOS/web clients  
+# WebSocket listener for iOS/web clients (CRITICAL FOR iOS APP)
 listener 9001 0.0.0.0
 protocol websockets
 allow_anonymous true
+
+# Persistence settings
+persistence true
+persistence_location /var/lib/mosquitto/
 
 # Logging configuration
 log_dest file /var/log/mosquitto/mosquitto.log
@@ -296,31 +310,45 @@ log_type error
 log_type warning
 log_type notice
 log_type information
+log_type debug
 connection_messages true
 log_timestamp true
 
-# Performance settings
+# Performance and connection settings
 max_connections 100
 max_inflight_messages 20
 max_queued_messages 100
 message_size_limit 1024
+keepalive_interval 60
+retry_interval 20
+
+# WebSocket specific settings
+websockets_log_level 255
+websockets_headers_size 1024
+
+# Security settings (allowing anonymous for simplicity)
+allow_anonymous true
 EOF
-    log "✅ Mosquitto configuration written"
+    log "✅ Mosquitto WebSocket configuration written"
     
-    # Clean up duplicate log entries
-    run_cmd "sudo sed -i '/^log_dest file/d' /etc/mosquitto/mosquitto.conf 2>/dev/null || true" "Cleaning duplicate log entries"
-    
-    # Create log directory
+    # Create log directory and set permissions
     run_cmd "sudo mkdir -p /var/log/mosquitto" "Creating Mosquitto log directory"
-    run_cmd "sudo chown mosquitto:mosquitto /var/log/mosquitto" "Setting Mosquitto log permissions"
+    run_cmd "sudo mkdir -p /var/lib/mosquitto" "Creating Mosquitto persistence directory"
+    run_cmd "sudo chown -R mosquitto:mosquitto /var/log/mosquitto" "Setting Mosquitto log permissions"
+    run_cmd "sudo chown -R mosquitto:mosquitto /var/lib/mosquitto" "Setting Mosquitto persistence permissions"
+    
+    # Stop mosquitto before configuration changes
+    debug "Stopping Mosquitto before restart..."
+    sudo systemctl stop mosquitto || true
+    sleep 2
     
     # Enable and start Mosquitto
     run_cmd "sudo systemctl enable mosquitto" "Enabling Mosquitto service"
-    run_cmd "sudo systemctl restart mosquitto" "Starting Mosquitto service"
+    run_cmd "sudo systemctl start mosquitto" "Starting Mosquitto service"
     
     # Wait for service to start
     debug "Waiting for Mosquitto to start..."
-    sleep 3
+    sleep 5
     
     # Verify Mosquitto is running
     if sudo systemctl is-active --quiet mosquitto; then
@@ -330,25 +358,58 @@ EOF
         debug "Mosquitto service status:"
         sudo systemctl status mosquitto >> "$DEBUG_LOG" 2>&1
         debug "Mosquitto journal logs:"
-        sudo journalctl -u mosquitto --no-pager -n 20 >> "$DEBUG_LOG" 2>&1
+        sudo journalctl -u mosquitto --no-pager -n 30 >> "$DEBUG_LOG" 2>&1
+        
+        # Try to diagnose the issue
+        debug "Checking mosquitto configuration syntax..."
+        sudo mosquitto -c /etc/mosquitto/mosquitto.conf -t >> "$DEBUG_LOG" 2>&1
         return 1
     fi
     
-    # Verify ports are listening
-    step "Verifying MQTT ports..."
-    local tcp_port=$(sudo netstat -tlnp | grep ":1883 " | wc -l)
-    local ws_port=$(sudo netstat -tlnp | grep ":9001 " | wc -l)
+    # Enhanced port verification with multiple attempts
+    step "Verifying MQTT ports (TCP 1883 and WebSocket 9001)..."
+    local attempts=0
+    local max_attempts=10
+    local tcp_port=0
+    local ws_port=0
     
-    debug "TCP port 1883 listeners: $tcp_port"
-    debug "WebSocket port 9001 listeners: $ws_port"
+    while [ $attempts -lt $max_attempts ]; do
+        attempts=$((attempts + 1))
+        tcp_port=$(sudo netstat -tlnp | grep ":1883 " | wc -l)
+        ws_port=$(sudo netstat -tlnp | grep ":9001 " | wc -l)
+        
+        debug "Attempt $attempts: TCP port 1883 listeners: $tcp_port, WebSocket port 9001 listeners: $ws_port"
+        
+        if [ "$tcp_port" -gt 0 ] && [ "$ws_port" -gt 0 ]; then
+            log "✅ Both TCP (1883) and WebSocket (9001) ports are listening"
+            sudo netstat -tlnp | grep -E "(1883|9001)" >> "$DEBUG_LOG"
+            break
+        else
+            if [ $attempts -eq $max_attempts ]; then
+                error "❌ MQTT ports not properly configured after $max_attempts attempts"
+                error "TCP port 1883: $tcp_port listeners"
+                error "WebSocket port 9001: $ws_port listeners"
+                
+                debug "Full netstat output:"
+                sudo netstat -tlnp >> "$DEBUG_LOG"
+                
+                debug "Mosquitto process check:"
+                pgrep -fl mosquitto >> "$DEBUG_LOG" || echo "No mosquitto processes found" >> "$DEBUG_LOG"
+                
+                return 1
+            else
+                warn "⚠️ Waiting for ports to become available (attempt $attempts/$max_attempts)..."
+                sleep 2
+            fi
+        fi
+    done
     
-    if [ "$tcp_port" -gt 0 ] && [ "$ws_port" -gt 0 ]; then
-        log "✅ Both TCP (1883) and WebSocket (9001) ports are listening"
-        sudo netstat -tlnp | grep -E "(1883|9001)" >> "$DEBUG_LOG"
+    # Test WebSocket connection specifically
+    step "Testing WebSocket connection on port 9001..."
+    if timeout 5 bash -c "</dev/tcp/localhost/9001" 2>/dev/null; then
+        log "✅ WebSocket port 9001 is accepting connections"
     else
-        error "❌ MQTT ports not properly configured"
-        sudo netstat -tlnp | grep -E "(1883|9001)" | tee -a "$DEBUG_LOG"
-        return 1
+        warn "⚠️ WebSocket port 9001 may not be accepting connections properly"
     fi
 }
 
@@ -360,14 +421,15 @@ configure_avahi() {
 <?xml version="1.0" standalone='no'?>
 <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
 <service-group>
-  <name replace-wildcards="yes">Simpson's House MQTT Control with ULN2003</name>
+  <name replace-wildcards="yes">Simpson's House MQTT Control with Garage Door</name>
   <service>
     <type>_mqtt._tcp</type>
     <port>1883</port>
-    <txt-record>version=3.2</txt-record>
+    <txt-record>version=3.6</txt-record>
     <txt-record>device=simpsons_house</txt-record>
     <txt-record>motor_driver=ULN2003</txt-record>
     <txt-record>websocket_port=9001</txt-record>
+    <txt-record>garage_door=enabled</txt-record>
   </service>
 </service-group>
 EOF
@@ -390,7 +452,7 @@ setup_systemd_service() {
     debug "Creating systemd service file..."
     sudo tee /etc/systemd/system/simpsons-house.service >/dev/null <<EOF
 [Unit]
-Description=Simpson's House MQTT Listener and GPIO Controller with ULN2003 Motor Driver
+Description=Simpson's House MQTT Listener and GPIO Controller with Garage Door
 After=network.target mosquitto.service
 Requires=mosquitto.service
 StartLimitIntervalSec=0
@@ -454,55 +516,66 @@ EOF
     fi
 }
 
-# Test MQTT functionality
+# Test MQTT functionality including WebSocket
 test_mqtt() {
     step "Testing MQTT broker functionality..."
     
-    debug "Testing MQTT publish..."
-    if mosquitto_pub -h localhost -t test/setup -m "Simpson's House ULN2003 setup test $(date)" -q 0; then
-        log "✅ MQTT publish test successful"
+    debug "Testing MQTT TCP publish..."
+    if mosquitto_pub -h localhost -t test/setup -m "Simpson's House garage door setup test $(date)" -q 0; then
+        log "✅ MQTT TCP publish test successful"
     else
-        error "❌ MQTT publish test failed"
+        error "❌ MQTT TCP publish test failed"
         return 1
     fi
     
-    debug "Testing MQTT subscribe (background test)..."
+    debug "Testing MQTT TCP subscribe..."
     timeout 5 mosquitto_sub -h localhost -t test/setup -C 1 >> "$DEBUG_LOG" 2>&1 &
     sleep 1
     mosquitto_pub -h localhost -t test/setup -m "Subscribe test message" -q 0
     wait
-    log "✅ MQTT subscribe test completed"
+    log "✅ MQTT TCP subscribe test completed"
+    
+    # Test garage door topics specifically
+    debug "Testing garage door MQTT topics..."
+    mosquitto_pub -h localhost -t home/garage -m "OPEN" -q 0
+    mosquitto_pub -h localhost -t home/garage -m "CLOSE" -q 0
+    log "✅ Garage door MQTT topics tested"
 }
 
 # Display comprehensive system information
 display_system_info() {
     log ""
-    log "=== Simpson's House System Information with ULN2003 ==="
+    log "=== Simpson's House System Information with Garage Door ==="
     
     # Get IP address
     local ip_address=$(hostname -I | awk '{print $1}')
     log "🏠 Raspberry Pi IP Address: $ip_address"
     log "🖥️  Hostname: $(hostname)"
     
-    # Show listening ports
-    log "📡 Listening ports:"
-    sudo netstat -tlnp | grep -E "(1883|9001)" | while read line; do
-        log "   $line"
-    done
+    # Show listening ports with enhanced verification
+    log "📡 Network Listening Ports:"
+    local port_output=$(sudo netstat -tlnp | grep -E "(1883|9001)")
+    if [ -n "$port_output" ]; then
+        echo "$port_output" | while read line; do
+            log "   $line"
+        done
+    else
+        error "❌ No MQTT ports found listening!"
+    fi
     
-    # Show GPIO configuration for ULN2003 setup
-    log "🔧 ULN2003 GPIO Pin Configuration (BCM numbering):"
+    # Show GPIO configuration for garage door setup
+    log "🔧 Garage Door GPIO Pin Configuration (BCM numbering):"
     log "   💡 Light (GPIO 17) - Pin 11 - LED + 220Ω resistor"
-    log "   🌀 ULN2003 Stepper Driver:"
+    log "   🏠 Garage Door Stepper Motor (ULN2003 Driver):"
     log "      - IN1 (GPIO 27) - Pin 13"
     log "      - IN2 (GPIO 18) - Pin 12"
     log "      - IN3 (GPIO 22) - Pin 15"
     log "      - IN4 (GPIO 24) - Pin 18"
-    log "   🚪 Door Servo (GPIO 23) - Pin 16 - Servo motor"
+    log "   🚪 Front Door Servo (GPIO 23) - Pin 16 - Servo motor"
     
-    # Show ULN2003 wiring information
+    # Show garage door wiring information
     log ""
-    log "🔌 ULN2003 Wiring Requirements:"
+    log "🔌 Garage Door Wiring Requirements:"
     log "   ⚡ Power: ULN2003 VCC → Pi 5V (Pin 4)"
     log "   🔗 Ground: ULN2003 GND → Pi GND"
     log "   🎛️  Control: Pi GPIO pins → ULN2003 IN1-IN4"
@@ -518,9 +591,9 @@ display_system_info() {
     fi
     
     if sudo systemctl is-active --quiet simpsons-house; then
-        log "   ✅ Simpson's House ULN2003 Controller - Running"
+        log "   ✅ Simpson's House Garage Controller - Running"
     else
-        log "   ❌ Simpson's House ULN2003 Controller - Stopped"
+        log "   ❌ Simpson's House Garage Controller - Stopped"
     fi
     
     if sudo systemctl is-active --quiet avahi-daemon; then
@@ -540,23 +613,24 @@ display_system_info() {
     log "=== iOS App Configuration ==="
     log "📱 Use these settings in your Swift Playgrounds app:"
     log "   🌐 Host: $ip_address"
-    log "   🔌 WebSocket Port: 9001"
-    log "   📨 MQTT Topics: home/light, home/fan, home/door"
+    log "   🔌 WebSocket Port: 9001 (CRITICAL - Must be working!)"
+    log "   📨 MQTT Topics: home/light, home/garage, home/door"
     log ""
-    log "🎮 Device Controls with ULN2003:"
+    log "🎮 Device Controls for Garage Door:"
     log "   💡 Light: Send 'ON' or 'OFF' to home/light"
-    log "   🌀 Motor: Send 'ON' (forward) or 'OFF' (stop) to home/fan"
-    log "   🚪 Door: Send 'ON' (open) or 'OFF' (close) to home/door"
+    log "   🏠 Garage Door: Send 'OPEN' or 'CLOSE' to home/garage"
+    log "   🚪 Front Door: Send 'ON' or 'OFF' to home/door"
     log ""
     log "🔧 Hardware Testing:"
-    log "   🧪 Test ULN2003: python3 ULN2003_test.py"
+    log "   🧪 Test Garage Door Motor: python3 stepper_test.py"
     log "   🧪 Test All GPIO: python3 gpio_test.py"
     log ""
     log "🔧 System Management Commands:"
     log "   📊 Status: sudo systemctl status simpsons-house"
     log "   📋 Logs:   sudo journalctl -u simpsons-house -f"
     log "   🔄 Restart: sudo systemctl restart simpsons-house"
-    log "   🛠️  MQTT Test: mosquitto_pub -h localhost -t home/fan -m ON"
+    log "   🛠️  MQTT Test: mosquitto_pub -h localhost -t home/garage -m OPEN"
+    log "   🌐 WebSocket Test: sudo netstat -tlnp | grep -E '(1883|9001)'"
     log ""
     log "📁 Log Files:"
     log "   🏠 Setup: $LOG_FILE"
@@ -564,8 +638,8 @@ display_system_info() {
     log "   📡 MQTT Listener: sudo journalctl -u simpsons-house -f"
     log "   🦟 Mosquitto: /var/log/mosquitto/mosquitto.log"
     log ""
-    log "⚠️  ULN2003 Safety Notes:"
-    log "   🔋 Always use external power supply for motor (9V battery)"
+    log "⚠️  Garage Door Safety Notes:"
+    log "   🔋 Motor runs for 3 seconds per command"
     log "   🔗 Ensure all grounds are connected together"
     log "   🌡️  ULN2003 IC may get warm during operation"
     log "   🔧 Test motor direction before final assembly"
@@ -573,27 +647,38 @@ display_system_info() {
     log "🔒 Corporate Networks:"
     log "   If you encounter SSL certificate errors, run: ./install_ca.sh"
     log ""
+    
+    # Final WebSocket verification
+    log "🌐 FINAL WEBSOCKET VERIFICATION:"
+    if sudo netstat -tlnp | grep -q ":9001.*LISTEN"; then
+        log "   ✅ WebSocket port 9001 is LISTENING - iOS app should connect!"
+    else
+        error "   ❌ WebSocket port 9001 is NOT listening - iOS app will fail!"
+        error "   Run: sudo systemctl restart mosquitto"
+        error "   Then check: sudo netstat -tlnp | grep 9001"
+    fi
 }
 
 # Main setup function
 main() {
     # Initialize logging
-    echo "Simpson's House Setup with ULN2003 - $(date)" > "$LOG_FILE"
-    echo "Simpson's House Debug Log with ULN2003 - $(date)" > "$DEBUG_LOG"
+    echo "Simpson's House Setup with Garage Door - $(date)" > "$LOG_FILE"
+    echo "Simpson's House Debug Log with Garage Door - $(date)" > "$DEBUG_LOG"
     
-    log "🏠 Starting Simpson's House Complete Setup v3.2 with ULN2003 Motor Driver..."
-    log "This will configure MQTT + WebSocket + GPIO control + ULN2003 for iOS app"
+    log "🏠 Starting Simpson's House Complete Setup v3.6 with Garage Door Control..."
+    log "This will configure MQTT + WebSocket + GPIO control + Garage Door for iOS app"
     log "Setup log: $LOG_FILE"
     log "Debug log: $DEBUG_LOG"
     log ""
-    log "🔧 NEW: Now includes ULN2003 motor driver for professional stepper motor control!"
+    log "🏠 NEW: Now includes garage door opener with 3-second time-based control!"
+    log "🌐 FIXED: Enhanced WebSocket configuration for iOS app connectivity"
     log "📋 Note: If you're in a corporate environment with SSL inspection,"
     log "   run './install_ca.sh' first before proceeding with this setup."
     log ""
     log "⚠️  Hardware Requirements:"
-    log "   • ULN2003 Motor Driver IC (16-pin DIP)"
-    log "   • stepper motor (3-6V, ≤600mA)"
-    log "   • External 9V battery for motor power"
+    log "   • ULN2003 Motor Driver Board"
+    log "   • 28BYJ-48 Stepper Motor"
+    log "   • 5V power supply for motor"
     log "   • Updated GPIO wiring per README.md"
     log ""
     
@@ -609,20 +694,20 @@ main() {
     test_mqtt
     display_system_info
     
-    log "🎉 Simpson's House with ULN2003 setup completed successfully!"
-    log "🌀 Your stepper motor is now ready for professional control!"
+    log "🎉 Simpson's House with Garage Door setup completed successfully!"
+    log "🏠 Your garage door opener is now ready for control!"
+    log "🌐 WebSocket port 9001 should be working for iOS app connectivity!"
     log "Connect your iPhone/iPad and start controlling the house! 🏠✨"
     log ""
     log "📋 Next Steps:"
-    log "   1. Test your ULN2003 wiring: python3 ULN2003_test.py"
-    log "   2. Test all GPIO pins: python3 gpio_test.py"
-    log "   3. Connect your iOS app and enjoy motor control!"
+    log "   1. Verify ports: sudo netstat -tlnp | grep -E '(1883|9001)'"
+    log "   2. Test garage door: mosquitto_pub -h localhost -t home/garage -m OPEN"
+    log "   3. Connect your iOS app and enjoy garage door control!"
     log ""
-    log "📋 If you encounter any issues:"
-    log "   1. Check the debug log: $DEBUG_LOG"
-    log "   2. Check service logs: sudo journalctl -u simpsons-house -f"
-    log "   3. Verify ULN2003 hardware connections match the GPIO configuration"
-    log "   4. Ensure 9V battery is connected and charged"
+    log "📋 If WebSocket port 9001 is not working:"
+    log "   1. Check Mosquitto logs: sudo journalctl -u mosquitto -f"
+    log "   2. Restart Mosquitto: sudo systemctl restart mosquitto"
+    log "   3. Verify config: sudo mosquitto -c /etc/mosquitto/mosquitto.conf -t"
 }
 
 # Error handling
