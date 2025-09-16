@@ -21,10 +21,9 @@ LIGHT_PIN = 17     # Living Room Light (LED + 220Ω resistor)
 STEPPER_PINS = [27, 18, 22, 24]  # ULN2003 IN1-IN4 for stepper motor
 SERVO_PIN = 23     # Front Door Servo
 
-# Garage Door Configuration
-GARAGE_DOOR_REVOLUTIONS = 3  # ← CHANGE THIS TO ADJUST GARAGE DOOR TRAVEL
-STEPS_PER_REVOLUTION = 512   # 28BYJ-48 stepper motor steps per revolution
-GARAGE_DOOR_SPEED = 0.002    # Delay between steps (smaller = faster)
+# Garage Door Configuration - SIMPLIFIED
+GARAGE_DOOR_RUN_TIME = 3.0    # Run motor for 3 seconds
+GARAGE_DOOR_SPEED = 0.002     # Delay between steps (smaller = faster)
 
 # MQTT broker settings
 BROKER_HOST = "localhost"
@@ -47,11 +46,10 @@ device_states = {
     "door": False
 }
 
-# Garage door state
+# Simplified garage door state
 garage_state = {
     "position": "closed",  # "closed", "opening", "open", "closing"
-    "step_position": 0,    # Current step position
-    "total_steps": GARAGE_DOOR_REVOLUTIONS * STEPS_PER_REVOLUTION
+    "last_command": None   # Track last command sent
 }
 
 # Global MQTT client and servo PWM object
@@ -93,7 +91,7 @@ def setup_gpio():
     logger.info(f"💡 Light configured on GPIO {LIGHT_PIN}")
     logger.info(f"🏠 Garage door stepper motor configured on pins: {STEPPER_PINS}")
     logger.info(f"🚪 Front door servo configured on GPIO {SERVO_PIN}")
-    logger.info(f"⚙️  Garage door: {GARAGE_DOOR_REVOLUTIONS} revolutions = {garage_state['total_steps']} steps")
+    logger.info(f"⚙️  Garage door: {GARAGE_DOOR_RUN_TIME} second run time")
 
 def set_servo_angle(angle: int) -> bool:
     """
@@ -118,7 +116,7 @@ def set_servo_angle(angle: int) -> bool:
         logger.error(f"❌ Servo control failed: {e}")
         return False
 
-# ─── GARAGE DOOR STEPPER MOTOR CONTROL ─────────────────────────────────────────
+# ─── SIMPLIFIED GARAGE DOOR STEPPER MOTOR CONTROL ─────────────────────────────────
 
 # Step sequence matching your working stepper_test.py
 STEP_SEQUENCE = [
@@ -138,17 +136,29 @@ def stop_stepper():
         GPIO.output(pin, GPIO.LOW)
     logger.info("🛑 Garage door stepper motor stopped")
 
-def run_garage_door_steps(steps: int, direction: str):
-    """Run garage door stepper motor for specified steps in given direction."""
-    logger.info(f"🏠 Moving garage door {direction}: {steps} steps")
+def run_stepper_for_time(direction: str, run_time: float):
+    """
+    Run garage door stepper motor for specified time in given direction.
+    direction: "forward" or "reverse" 
+    run_time: time in seconds to run motor
+    """
+    logger.info(f"🏠 Running garage door motor {direction} for {run_time} seconds...")
     
     # Choose step sequence direction
-    sequence = STEP_SEQUENCE if direction == "opening" else list(reversed(STEP_SEQUENCE))
+    if direction == "forward":
+        sequence = STEP_SEQUENCE
+        logger.info("🏠 Direction: FORWARD (opening)")
+    else:
+        sequence = list(reversed(STEP_SEQUENCE))
+        logger.info("🏠 Direction: REVERSE (closing)")
+    
+    start_time = time.time()
+    step_count = 0
     
     try:
-        for step in range(steps):
+        while (time.time() - start_time) < run_time:
             # Get step pattern
-            pattern = sequence[step % len(sequence)]
+            pattern = sequence[step_count % len(sequence)]
             
             # Apply pattern to GPIO pins
             for pin, value in zip(STEPPER_PINS, pattern):
@@ -156,60 +166,52 @@ def run_garage_door_steps(steps: int, direction: str):
             
             # Wait between steps
             time.sleep(GARAGE_DOOR_SPEED)
-            
-            # Update position
-            if direction == "opening":
-                garage_state["step_position"] += 1
-            else:
-                garage_state["step_position"] -= 1
+            step_count += 1
         
         # Turn off all pins after completion
         stop_stepper()
-        logger.info(f"✅ Garage door {direction} completed {steps} steps")
+        logger.info(f"✅ Garage door {direction} completed - ran for {run_time} seconds ({step_count} steps)")
+        
+        return True
         
     except Exception as e:
         logger.error(f"❌ Garage door stepper motor error: {e}")
         stop_stepper()
+        return False
 
 def open_garage_door():
-    """Open the garage door completely."""
-    if garage_state["position"] == "open":
-        logger.info("🏠 Garage door is already open")
-        return True
-    
-    logger.info(f"🏠 Opening garage door ({GARAGE_DOOR_REVOLUTIONS} revolutions)...")
+    """Open the garage door by running forward for 3 seconds."""
+    logger.info("🏠 OPENING garage door...")
     garage_state["position"] = "opening"
     
-    # Calculate steps needed to fully open
-    steps_to_open = garage_state["total_steps"] - garage_state["step_position"]
+    success = run_stepper_for_time("forward", GARAGE_DOOR_RUN_TIME)
     
-    if steps_to_open > 0:
-        run_garage_door_steps(steps_to_open, "opening")
+    if success:
+        garage_state["position"] = "open"
+        garage_state["last_command"] = "OPEN"
+        logger.info("🏠 Garage door is now OPEN")
+    else:
+        garage_state["position"] = "unknown"
+        logger.error("❌ Failed to open garage door")
     
-    garage_state["position"] = "open"
-    garage_state["step_position"] = garage_state["total_steps"]
-    logger.info("🏠 Garage door is now OPEN")
-    return True
+    return success
 
 def close_garage_door():
-    """Close the garage door completely."""
-    if garage_state["position"] == "closed":
-        logger.info("🏠 Garage door is already closed")
-        return True
-    
-    logger.info(f"🏠 Closing garage door ({GARAGE_DOOR_REVOLUTIONS} revolutions)...")
+    """Close the garage door by running reverse for 3 seconds."""
+    logger.info("🏠 CLOSING garage door...")
     garage_state["position"] = "closing"
     
-    # Calculate steps needed to fully close
-    steps_to_close = garage_state["step_position"]
+    success = run_stepper_for_time("reverse", GARAGE_DOOR_RUN_TIME)
     
-    if steps_to_close > 0:
-        run_garage_door_steps(steps_to_close, "closing")
+    if success:
+        garage_state["position"] = "closed"
+        garage_state["last_command"] = "CLOSE"
+        logger.info("🏠 Garage door is now CLOSED")
+    else:
+        garage_state["position"] = "unknown"
+        logger.error("❌ Failed to close garage door")
     
-    garage_state["position"] = "closed"
-    garage_state["step_position"] = 0
-    logger.info("🏠 Garage door is now CLOSED")
-    return True
+    return success
 
 # ─── MQTT EVENT HANDLERS ───────────────────────────────────────────────────────
 
@@ -271,6 +273,7 @@ def on_message(client, userdata, msg):
         elif topic == TOPIC_GARAGE:
             success = control_garage_door(payload)
             device_name = "Garage Door"
+            # Update device state based on last successful command
             device_states["garage"] = (garage_state["position"] == "open")
             
         elif topic == TOPIC_DOOR:
@@ -316,7 +319,7 @@ def control_light(state: bool) -> bool:
 
 def control_garage_door(command: str) -> bool:
     """
-    Control the garage door stepper motor.
+    Control the garage door stepper motor with simplified time-based approach.
     Accepts: OPEN, CLOSE
     """
     try:
@@ -333,6 +336,7 @@ def control_garage_door(command: str) -> bool:
             
     except Exception as e:
         logger.error(f"❌ Garage door control error: {e}")
+        stop_stepper()  # Emergency stop on error
         return False
 
 def control_door(state: bool) -> bool:
@@ -355,10 +359,8 @@ def get_garage_status() -> dict:
     """Get current garage door status for diagnostics."""
     return {
         "position": garage_state["position"],
-        "step_position": garage_state["step_position"],
-        "total_steps": garage_state["total_steps"],
-        "revolutions": GARAGE_DOOR_REVOLUTIONS,
-        "percentage_open": round((garage_state["step_position"] / garage_state["total_steps"]) * 100, 1),
+        "last_command": garage_state["last_command"],
+        "run_time_seconds": GARAGE_DOOR_RUN_TIME,
         "gpio_states": {f"pin{idx+1}": GPIO.input(pin) for idx, pin in enumerate(STEPPER_PINS)}
     }
 
@@ -378,7 +380,7 @@ def publish_device_status(device: str, status: bool):
             garage_status = get_garage_status()
             garage_status_topic = f"home/{device}/garage_status"
             client.publish(garage_status_topic, json.dumps(garage_status), retain=True)
-            logger.info(f"📊 Garage status published: {garage_status['position']} ({garage_status['percentage_open']}% open)")
+            logger.info(f"📊 Garage status published: {garage_status['position']} (last: {garage_status['last_command']})")
         
         # Publish comprehensive system status
         system_status = {
@@ -399,13 +401,12 @@ def publish_system_status(status: str, message: str = ""):
             "status": status,
             "timestamp": datetime.now().isoformat(),
             "message": message,
-            "version": "3.4",
-            "controller": "Simpson's House GPIO Controller with Garage Door Opener",
+            "version": "3.5",
+            "controller": "Simpson's House GPIO Controller with Simplified Garage Door",
             "motor_driver": "ULN2003",
             "garage_config": {
-                "revolutions": GARAGE_DOOR_REVOLUTIONS,
-                "total_steps": garage_state["total_steps"],
-                "speed": GARAGE_DOOR_SPEED
+                "run_time_seconds": GARAGE_DOOR_RUN_TIME,
+                "speed_delay": GARAGE_DOOR_SPEED
             },
             "gpio_pins": {
                 "light": LIGHT_PIN,
@@ -492,8 +493,8 @@ def main():
     """Main function to run Simpson's House MQTT listener."""
     global client
     
-    logger.info("🏠 Starting Simpson's House Smart Home Controller v3.4")
-    logger.info("🏠 Now with garage door opener control!")
+    logger.info("🏠 Starting Simpson's House Smart Home Controller v3.5")
+    logger.info("🏠 Now with simplified 3-second garage door control!")
     logger.info("📺 'D'oh! Welcome to the smartest house in Springfield!'")
     
     # Register signal handlers for graceful shutdown
@@ -523,12 +524,11 @@ def main():
         client.connect(BROKER_HOST, BROKER_PORT, KEEPALIVE)
         
         # Start MQTT message loop
-        logger.info("🎮 Simpson's House with garage door opener ready!")
+        logger.info("🎮 Simpson's House with simplified garage door control ready!")
         logger.info("📱 Connect your iPhone/iPad and start controlling the house!")
         logger.info("🏠 Garage door commands:")
-        logger.info("   • OPEN - Open garage door completely")
-        logger.info("   • CLOSE - Close garage door completely")
-        logger.info(f"⚙️  Configured for {GARAGE_DOOR_REVOLUTIONS} revolutions ({garage_state['total_steps']} steps)")
+        logger.info(f"   • OPEN - Run motor FORWARD for {GARAGE_DOOR_RUN_TIME} seconds")
+        logger.info(f"   • CLOSE - Run motor REVERSE for {GARAGE_DOOR_RUN_TIME} seconds")
         client.loop_forever()
         
     except KeyboardInterrupt:
