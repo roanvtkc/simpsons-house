@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Simpson's House MQTT Listener and GPIO Controller with Stepper Motor
-Handles MQTT commands from iOS Swift Playgrounds app and controls Raspberry Pi GPIO
-Uses a 28BYJ-48 stepper motor driven by a ULN2003 board
+Simpson's House MQTT Listener and GPIO Controller for Garage Door Automation
+Handles MQTT commands from the Swift Playgrounds app and controls Raspberry Pi GPIO
+Uses a 28BYJ-48 stepper motor driven by a ULN2003 board to raise/lower the garage door
 """
 
 import paho.mqtt.client as mqtt
@@ -18,8 +18,11 @@ from datetime import datetime
 
 # GPIO pin assignments (BCM numbering)
 LIGHT_PIN = 17     # Living Room Light (LED + 220Ω resistor)
-STEPPER_PINS = [27, 18, 22, 24]  # ULN2003 IN1-IN4 for stepper motor
+STEPPER_PINS = [27, 18, 22, 24]  # ULN2003 IN1-IN4 for garage door stepper motor
 SERVO_PIN = 23     # Front Door Servo
+
+# Garage door travel configuration (3 full revolutions of 28BYJ-48)
+GARAGE_TRAVEL_STEPS = 512 * 3
 
 # MQTT broker settings
 BROKER_HOST = "localhost"
@@ -27,25 +30,26 @@ BROKER_PORT = 1883
 KEEPALIVE   = 60
 
 # MQTT topics matching iOS Swift Playgrounds app
-TOPIC_LIGHT = "home/light"
-TOPIC_FAN   = "home/fan"     # Controls stepper motor via ULN2003 driver
-TOPIC_DOOR  = "home/door"
+TOPIC_LIGHT  = "home/light"
+TOPIC_GARAGE = "home/garage"  # Controls garage door via ULN2003 driver
+TOPIC_DOOR   = "home/door"
 
 # Status feedback topics for iOS app
 TOPIC_STATUS = "home/status"
 TOPIC_SYSTEM = "home/system"
 
-# Device states tracking
+# Device states tracking (True = active/open, False = inactive/closed)
 device_states = {
     "light": False,
-    "fan": False,
+    "garage": False,
     "door": False
 }
 
-# Stepper motor state
+# Garage door stepper motor state
 motor_state = {
     "running": False,
-    "position": 0  # cumulative steps moved
+    "position": 0,  # cumulative steps moved
+    "last_action": "close"
 }
 
 # Global MQTT client and servo PWM object
@@ -67,8 +71,8 @@ logger = logging.getLogger(__name__)
 # ─── GPIO INITIALIZATION ───────────────────────────────────────────────────────
 
 def setup_gpio():
-    """Initialize GPIO pins for Simpson's House devices with stepper motor."""
-    logger.info("🏠 Initializing Simpson's House GPIO with stepper motor...")
+    """Initialize GPIO pins for Simpson's House devices including garage door stepper."""
+    logger.info("🏠 Initializing Simpson's House GPIO with garage door controller...")
     
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
@@ -85,7 +89,7 @@ def setup_gpio():
     SERVO_PWM.start(0)
 
     logger.info(f"💡 Light configured on GPIO {LIGHT_PIN}")
-    logger.info(f"🌀 Stepper motor configured on pins: {STEPPER_PINS}")
+    logger.info(f"🚗 Garage door stepper configured on pins: {STEPPER_PINS}")
     logger.info(f"🚪 Door servo configured on GPIO {SERVO_PIN}")
 
 def set_servo_angle(angle: int) -> bool:
@@ -135,7 +139,10 @@ def rotate_stepper(direction: str, steps: int = 512):
     """Rotate stepper motor in specified direction for steps."""
     seq = STEP_SEQUENCE if direction == "forward" else list(reversed(STEP_SEQUENCE))
     stepper_step(seq, steps)
-    motor_state["position"] += steps if direction == "forward" else -steps
+    if direction == "forward":
+        motor_state["position"] += steps
+    else:
+        motor_state["position"] = max(0, motor_state["position"] - steps)
 
 def stop_stepper():
     for pin in STEPPER_PINS:
@@ -148,16 +155,16 @@ def on_connect(client, userdata, flags, rc):
     """Called when MQTT client connects to broker."""
     if rc == 0:
         logger.info("✅ Connected to Simpson's House MQTT broker")
-        
+
         # Subscribe to device control topics
-        topics = [TOPIC_LIGHT, TOPIC_FAN, TOPIC_DOOR]
+        topics = [TOPIC_LIGHT, TOPIC_GARAGE, TOPIC_DOOR]
         for topic in topics:
             client.subscribe(topic)
             logger.info(f"📡 Subscribed to: {topic}")
-        
+
         # Publish initial system status
-        publish_system_status("online", "Simpson's House controller with stepper motor started")
-        
+        publish_system_status("online", "Simpson's House controller with garage door stepper started")
+
         # Publish initial device states
         for device, state in device_states.items():
             publish_device_status(device, state)
@@ -175,53 +182,69 @@ def on_disconnect(client, userdata, rc):
 
 def on_message(client, userdata, msg):
     """
-    Handle incoming MQTT messages from iOS app.
+    Handle incoming MQTT messages from the Swift Playgrounds app.
     Processes device control commands and updates GPIO accordingly.
     """
     try:
         topic = msg.topic
         payload = msg.payload.decode().strip().upper()
-        
+
         logger.info(f"📨 Received command: {topic} → {payload}")
-        
-        # Validate command
-        if payload not in ["ON", "OFF"]:
-            logger.warning(f"⚠️  Invalid command '{payload}' for {topic}")
-            publish_error(topic, f"Invalid command: {payload}")
-            return
-        
-        command_state = (payload == "ON")
+
         success = False
         device_name = ""
-        
-        # Execute command based on topic
+        command_state = None
+        device_key = topic.split('/')[-1]
+
         if topic == TOPIC_LIGHT:
-            success = control_light(command_state)
+            valid_commands = {"ON": True, "OFF": False}
             device_name = "Living Room Light"
-            
-        elif topic == TOPIC_FAN:
-            success = control_motor(command_state)
-            device_name = "Stepper Motor"
-            
+            command_state = valid_commands.get(payload)
+            if command_state is None:
+                logger.warning(f"⚠️  Invalid light command '{payload}'")
+                publish_error(topic, f"Invalid command: {payload}. Use ON or OFF.")
+                return
+            success = control_light(command_state)
+
+        elif topic == TOPIC_GARAGE:
+            valid_commands = {"OPEN": True, "CLOSE": False}
+            device_name = "Garage Door"
+            command_state = valid_commands.get(payload)
+            if command_state is None:
+                logger.warning(f"⚠️  Invalid garage command '{payload}'")
+                publish_error(topic, f"Invalid command: {payload}. Use OPEN or CLOSE.")
+                return
+            success = control_garage_door(command_state)
+
         elif topic == TOPIC_DOOR:
-            success = control_door(command_state)
+            valid_commands = {"ON": True, "OFF": False}
             device_name = "Front Door"
-            
+            command_state = valid_commands.get(payload)
+            if command_state is None:
+                logger.warning(f"⚠️  Invalid door command '{payload}'")
+                publish_error(topic, f"Invalid command: {payload}. Use ON or OFF.")
+                return
+            success = control_door(command_state)
+
         else:
             logger.warning(f"⚠️  Unknown topic: {topic}")
             return
-        
-        # Update device state and publish status
-        if success:
-            device_key = topic.split('/')[-1]  # Extract device name from topic
+
+        if success and command_state is not None:
             device_states[device_key] = command_state
-            
             publish_device_status(device_key, command_state)
-            logger.info(f"✅ {device_name} successfully turned {'ON' if command_state else 'OFF'}")
+
+            if topic == TOPIC_GARAGE:
+                action = "OPENED" if command_state else "CLOSED"
+                logger.info(f"✅ {device_name} successfully {action}")
+            else:
+                logger.info(
+                    f"✅ {device_name} successfully turned {'ON' if command_state else 'OFF'}"
+                )
         else:
             logger.error(f"❌ Failed to control {device_name}")
-            publish_error(topic, f"Device control failed")
-            
+            publish_error(topic, "Device control failed")
+
     except Exception as e:
         logger.error(f"❌ Message handling error: {e}")
         publish_error(msg.topic, f"Processing error: {str(e)}")
@@ -239,20 +262,24 @@ def control_light(state: bool) -> bool:
         logger.error(f"❌ Light control error: {e}")
         return False
 
-def control_motor(state: bool) -> bool:
-    """Control the stepper motor via ULN2003 driver."""
+def control_garage_door(open_door: bool) -> bool:
+    """Control the garage door stepper motor via ULN2003 driver."""
     try:
-        if state:
-            logger.info("🌀 Rotating stepper motor forward...")
-            motor_state["running"] = True
-            rotate_stepper("forward", 512)
-            motor_state["running"] = False
+        motor_state["running"] = True
+
+        if open_door:
+            logger.info("🚗 Opening garage door (forward rotation)...")
+            rotate_stepper("forward", GARAGE_TRAVEL_STEPS)
         else:
-            logger.info("🛑 Stopping stepper motor...")
-            stop_stepper()
+            logger.info("🚗 Closing garage door (reverse rotation)...")
+            rotate_stepper("reverse", GARAGE_TRAVEL_STEPS)
+
+        motor_state["running"] = False
+        motor_state["last_action"] = "open" if open_door else "close"
         return True
     except Exception as e:
-        logger.error(f"❌ Stepper motor control error: {e}")
+        logger.error(f"❌ Garage door control error: {e}")
+        motor_state["running"] = False
         return False
 
 def control_door(state: bool) -> bool:
@@ -271,16 +298,16 @@ def control_door(state: bool) -> bool:
 
 # ─── MOTOR CONTROL UTILITY FUNCTIONS ───────────────────────────────────────────
 
-def stop_motor_emergency():
-    """Emergency stop for motor - cuts power immediately."""
+def stop_garage_emergency():
+    """Emergency stop for the garage door motor - cuts power immediately."""
     try:
-        logger.warning("🚨 EMERGENCY MOTOR STOP")
+        logger.warning("🚨 EMERGENCY GARAGE STOP")
         stop_stepper()
     except Exception as e:
         logger.error(f"❌ Emergency stop failed: {e}")
 
-def get_motor_status() -> dict:
-    """Get current stepper motor status for diagnostics."""
+def get_garage_motor_status() -> dict:
+    """Get current garage door stepper motor status for diagnostics."""
     return {
         "running": motor_state["running"],
         "position": motor_state["position"],
@@ -292,23 +319,26 @@ def get_motor_status() -> dict:
 def publish_device_status(device: str, status: bool):
     """Publish device status update to MQTT for iOS app feedback."""
     try:
-        status_msg = "ON" if status else "OFF"
+        if device == "garage":
+            status_msg = "OPEN" if status else "CLOSED"
+        else:
+            status_msg = "ON" if status else "OFF"
         status_topic = f"home/{device}/status"
-        
+
         # Publish individual device status
         client.publish(status_topic, status_msg, retain=True)
-        
-        # Include motor diagnostics for fan status
-        if device == "fan":
-            motor_status = get_motor_status()
+
+        # Include motor diagnostics for garage status
+        if device == "garage":
+            motor_status = get_garage_motor_status()
             motor_status_topic = f"home/{device}/motor_status"
             client.publish(motor_status_topic, json.dumps(motor_status), retain=True)
-        
+
         # Publish comprehensive system status
         system_status = {
             "timestamp": datetime.now().isoformat(),
             "devices": device_states.copy(),
-            "motor": motor_state.copy(),
+            "garage_motor": motor_state.copy(),
             "controller": "online"
         }
         client.publish(TOPIC_STATUS, json.dumps(system_status), retain=True)
@@ -323,12 +353,12 @@ def publish_system_status(status: str, message: str = ""):
             "status": status,
             "timestamp": datetime.now().isoformat(),
             "message": message,
-            "version": "3.1",
-            "controller": "Simpson's House GPIO Controller with Stepper Motor",
+            "version": "3.2",
+            "controller": "Simpson's House GPIO Controller with Garage Door",
             "motor_driver": "ULN2003",
             "gpio_pins": {
                 "light": LIGHT_PIN,
-                "stepper": STEPPER_PINS,
+                "garage_stepper": STEPPER_PINS,
                 "servo": SERVO_PIN
             }
         }
@@ -344,7 +374,7 @@ def publish_error(topic: str, error_msg: str):
             "error": error_msg,
             "timestamp": datetime.now().isoformat(),
             "topic": topic,
-            "motor_status": get_motor_status() if "fan" in topic else None
+            "motor_status": get_garage_motor_status() if "garage" in topic else None
         }
         client.publish(error_topic, json.dumps(error_info))
     except Exception as e:
@@ -375,9 +405,9 @@ def cleanup_and_exit():
     logger.info("🧹 Cleaning up Simpson's House systems...")
     
     try:
-        # Emergency stop motor first
-        logger.info("🚨 Emergency stopping motor...")
-        stop_motor_emergency()
+        # Emergency stop garage door first
+        logger.info("🚨 Emergency stopping garage door...")
+        stop_garage_emergency()
         
         # Turn off all devices safely
         logger.info("🔌 Turning off all devices...")
@@ -412,8 +442,8 @@ def main():
     """Main function to run Simpson's House MQTT listener."""
     global client
     
-    logger.info("🏠 Starting Simpson's House Smart Home Controller v3.1")
-    logger.info("🔧 Now with stepper motor support!")
+    logger.info("🏠 Starting Simpson's House Smart Home Controller v3.2")
+    logger.info("🚗 Garage door mode enabled with ULN2003 driver!")
     logger.info("📺 'D'oh! Welcome to the smartest house in Springfield!'")
     
     # Register signal handlers for graceful shutdown
@@ -425,7 +455,7 @@ def main():
         setup_gpio()
         
         # Create and configure MQTT client
-        client = mqtt.Client(client_id="simpsons_house_stepper_controller")
+        client = mqtt.Client(client_id="simpsons_house_garage_controller")
         client.on_connect = on_connect
         client.on_disconnect = on_disconnect
         client.on_message = on_message
@@ -435,7 +465,7 @@ def main():
             "status": "offline",
             "timestamp": datetime.now().isoformat(),
             "reason": "unexpected_disconnect",
-            "motor_emergency_stopped": True
+            "garage_emergency_stopped": True
         }), retain=True)
         
         # Connect to MQTT broker
@@ -443,9 +473,9 @@ def main():
         client.connect(BROKER_HOST, BROKER_PORT, KEEPALIVE)
         
         # Start MQTT message loop
-        logger.info("🎮 Simpson's House with stepper motor control ready!")
+        logger.info("🎮 Simpson's House garage door control ready!")
         logger.info("📱 Connect your iPhone/iPad and start controlling the house!")
-        logger.info("🌀 Stepper control: ON=Forward rotation, OFF=Stop")
+        logger.info("🚗 Garage door commands: OPEN=Forward rotation, CLOSE=Reverse rotation")
         client.loop_forever()
         
     except KeyboardInterrupt:
@@ -453,9 +483,9 @@ def main():
     except Exception as e:
         logger.error(f"❌ Fatal error: {e}")
         logger.error("💥 Simpson's House controller crashed!")
-        # Emergency stop motor on crash
+        # Emergency stop garage door on crash
         try:
-            stop_motor_emergency()
+            stop_garage_emergency()
         except:
             pass
     finally:
