@@ -22,7 +22,7 @@ STEPPER_PINS = [27, 18, 22, 24]  # ULN2003 IN1-IN4 for garage door stepper motor
 SERVO_PIN = 23     # Front Door Servo
 
 # Garage door travel configuration (3 full revolutions of 28BYJ-48)
-GARAGE_TRAVEL_STEPS = 512 * 3
+GARAGE_TRAVEL_STEPS = 100
 
 # MQTT broker settings
 BROKER_HOST = "localhost"
