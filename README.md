@@ -95,32 +95,38 @@ chmod +x install_ca.sh
     GND (39) (40) GPIO21
 ```
 
-#### 🔧 Wiring Diagram
+#### 🔧 Wiring
 
-**💡 Living Room Light (GPIO 17 - Pin 11):**
-```
-GPIO 17 (Pin 11) ──── 220Ω Resistor ──── LED (+) 
-                                         LED (-) ──── GND (Pin 9)
-```
+> 📖 **See [WIRING_GUIDE.md](WIRING_GUIDE.md) for the full step-by-step wiring instructions**, including how to identify each component, breadboard layouts, common mistakes, and per-device troubleshooting.
 
-**🚗 Garage Door Stepper Motor with ULN2003 Driver:**
-```
-Connections:
-GPIO 27 (Pin 13) ──── ULN2003 IN1
-GPIO 18 (Pin 12) ──── ULN2003 IN2
-GPIO 22 (Pin 15) ──── ULN2003 IN3
-GPIO 24 (Pin 18) ──── ULN2003 IN4
-5V (Pin 2) ────────── ULN2003 VCC
-GND (Pin 14) ───────── ULN2003 GND
-Stepper motor plugs into ULN2003 board via 5-pin connector to drive the garage door
-```
+Quick reference — connections at a glance:
 
-**🚪 Front Door Servo (GPIO 23 - Pin 16):**
+**💡 Living Room Light (GPIO 17 → physical pin 11)**
 ```
-GPIO 23 (Pin 16) ──── Servo Signal (Yellow/Orange)
-5V (Pin 4) ──────────── Servo VCC (Red)
-GND (Pin 6) ─────────── Servo GND (Brown/Black)
+Pi GPIO 17 (pin 11) ─── 220Ω resistor ─── LED (+) long leg
+                                           LED (−) short leg ─── Pi GND (pin 9)
 ```
+Key fact: the **longer LED leg is +**; it goes toward GPIO 17. The shorter leg goes to GND.
+
+**🚗 Garage Door — Stepper Motor via ULN2003 Driver Board**
+```
+Pi GPIO 27 (pin 13) ─── ULN2003 IN1
+Pi GPIO 18 (pin 12) ─── ULN2003 IN2
+Pi GPIO 22 (pin 15) ─── ULN2003 IN3
+Pi GPIO 24 (pin 18) ─── ULN2003 IN4
+Pi 5V      (pin  2) ─── ULN2003 VCC
+Pi GND     (pin 14) ─── ULN2003 GND
+28BYJ-48 motor white plug ─── ULN2003 5-pin motor connector (keyed, one way only)
+```
+Key fact: the **order of IN1–IN4 matters** — wrong order = motor hums but doesn't spin.
+
+**🚪 Front Door — Servo Motor (GPIO 23 → physical pin 16)**
+```
+Pi GPIO 23 (pin 16) ─── Servo SIGNAL wire (orange / yellow / white)
+Pi 5V      (pin  4) ─── Servo POWER wire  (red)
+Pi GND     (pin  6) ─── Servo GROUND wire (brown / black)
+```
+Key fact: **red is always power**; if your servo has different colours, red is still VCC.
 
 #### 📋 Component List
 
