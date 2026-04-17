@@ -43,6 +43,7 @@ graph TD
 
 - **Raspberry Pi** running Raspberry Pi OS (32-bit or 64-bit)
 - **SSH access** to the Pi (default credentials: `pi`/`tkcraspberry`)
+  > 📱 **iPad SSH client**: We recommend [**Secure ShellFish**](https://secureshellfish.app) — no account required, saves sessions, and has a proper iOS keyboard toolbar. Free tier is sufficient for this project.
 - **Git installed** on the Pi (will be installed automatically if missing)
 - **iOS device** with Swift Playgrounds 4+ or macOS with Xcode 13+
 - **Hardware components**: LEDs, resistors, ULN2003 driver with 28BYJ-48 stepper motor for the garage door opener, servo motor, breadboard
