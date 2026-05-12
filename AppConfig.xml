@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Managed App Configuration for Swift Playgrounds (com.apple.Playgrounds).
+  Deploy via Apple Configurator 2, Jamf, Mosyle, or any AppConfig-compatible MDM.
+  The subscriptionFeedURL key causes Swift Playgrounds to subscribe to the
+  specified feed on first launch of the managed app.
+-->
+<managedAppConfiguration>
+  <version>1</version>
+  <bundleId>com.apple.Playgrounds</bundleId>
+
+  <dict>
+    <string keyName="subscriptionFeedURL">
+      <defaultValue>
+        <value>https://dbbudd.github.io/feed.json</value>
+      </defaultValue>
+    </string>
+  </dict>
+
+  <presentation defaultLocale="en-US">
+    <fieldGroup>
+      <name>
+        <language value="en-US">Swift Playgrounds Subscription Feed</language>
+      </name>
+      <field keyName="subscriptionFeedURL" type="input">
+        <label>
+          <language value="en-US">Feed URL</language>
+        </label>
+        <description>
+          <language value="en-US">
+            URL of the Swift Playgrounds JSON feed to subscribe to.
+            Defaults to the Simpson's House project feed.
+          </language>
+        </description>
+        <constraint nullable="false" />
+      </field>
+    </fieldGroup>
+  </presentation>
+</managedAppConfiguration>
