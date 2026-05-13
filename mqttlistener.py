@@ -4,7 +4,7 @@ Simpson's House MQTT Listener and GPIO Controller
 ==================================================
 This Python script runs on the Raspberry Pi and does two things:
   1. Listens for commands sent from the iPad app over the network (via MQTT)
-  2. Controls the real hardware (LED, stepper motor, servo) using the Pi's GPIO pins
+  2. Controls the real hardware (LED, garage servo, front door servo) using the Pi's GPIO pins
 
 TEACHING: Think of this script as the "butler" of the smart house.
 The iPad app shouts orders ("turn the light on!") and this script
@@ -16,7 +16,7 @@ HOW IT ALL CONNECTS:
 
 import paho.mqtt.client as mqtt  # Library that speaks the MQTT protocol
 import RPi.GPIO as GPIO           # Library that controls the Pi's physical pins
-import time                       # Used to add pauses (e.g. between stepper motor steps)
+import time                       # Used to add pauses (e.g. while servo moves)
 import logging                    # Used to print status messages to the terminal
 import json                       # Used to format status updates as JSON (structured text)
 import signal                     # Used to catch Ctrl+C and shutdown cleanly
@@ -33,13 +33,9 @@ from datetime import datetime     # Used to add timestamps to log messages
 # GPIO pin assignments — these match the physical wires you plugged in.
 # BCM numbering means we use the chip's numbers (GPIO 17), NOT the
 # board's physical pin positions (which would be pin 11 for GPIO 17).
-LIGHT_PIN = 17              # Living Room Light (LED + 220Ω resistor on GPIO 17)
-STEPPER_PINS = [27, 18, 22, 24]  # Garage door: 4 pins drive the ULN2003 stepper motor
-SERVO_PIN = 23              # Front Door Servo signal wire
-
-# How many stepper motor steps = one full open or close action.
-# Increase this number to make the garage door travel further.
-GARAGE_TRAVEL_STEPS = 100
+LIGHT_PIN        = 17   # Living Room Light (LED + 220Ω resistor on GPIO 17)
+GARAGE_SERVO_PIN = 27   # Garage Door Servo signal wire
+SERVO_PIN        = 23   # Front Door Servo signal wire
 
 # MQTT broker address — "localhost" means "on this same Raspberry Pi".
 # The broker is a separate program (Mosquitto) that routes messages.
@@ -67,18 +63,11 @@ device_states = {
     "door":   False
 }
 
-# Extra tracking just for the garage motor so we know if it's moving
-# and how far it has travelled.
-motor_state = {
-    "running":     False,
-    "position":    0,       # cumulative steps moved from the starting position
-    "last_action": "close"
-}
-
 # These are set up later in main() — we use "global" to share them
 # between functions without passing them as parameters every time.
-client    = None  # The MQTT client object
-SERVO_PWM = None  # The PWM (pulse-width modulation) controller for the servo
+client           = None  # The MQTT client object
+GARAGE_SERVO_PWM = None  # PWM controller for the garage door servo
+SERVO_PWM        = None  # PWM controller for the front door servo
 
 # =============================================================================
 # SECTION 2: LOGGING
@@ -118,29 +107,28 @@ def setup_gpio():
     # Set up the light pin as an output, starting LOW (off)
     GPIO.setup(LIGHT_PIN, GPIO.OUT, initial=GPIO.LOW)
 
-    # The stepper motor needs 4 output pins — loop sets them all up
-    for pin in STEPPER_PINS:
-        GPIO.setup(pin, GPIO.OUT, initial=GPIO.LOW)
-
-    # Set up the servo signal pin as an output, starting LOW
+    # Set up both servo signal pins as outputs, starting LOW
+    GPIO.setup(GARAGE_SERVO_PIN, GPIO.OUT, initial=GPIO.LOW)
     GPIO.setup(SERVO_PIN, GPIO.OUT, initial=GPIO.LOW)
 
     # TEACHING: PWM = Pulse Width Modulation. Instead of just HIGH or LOW,
     # PWM rapidly switches the pin on/off at a set frequency. The ratio of
     # on-time to off-time (duty cycle) controls the servo's angle.
     # 50 Hz is the standard frequency for hobby servo motors.
-    global SERVO_PWM
-    SERVO_PWM = GPIO.PWM(SERVO_PIN, 50)  # 50 Hz PWM on the servo pin
-    SERVO_PWM.start(0)                    # Start with 0% duty cycle (servo off)
+    global GARAGE_SERVO_PWM, SERVO_PWM
+    GARAGE_SERVO_PWM = GPIO.PWM(GARAGE_SERVO_PIN, 50)  # 50 Hz PWM on the garage servo pin
+    GARAGE_SERVO_PWM.start(0)                            # Start with 0% duty cycle (servo off)
+    SERVO_PWM = GPIO.PWM(SERVO_PIN, 50)                 # 50 Hz PWM on the front door servo pin
+    SERVO_PWM.start(0)                                   # Start with 0% duty cycle (servo off)
 
     logger.info(f"💡 Light pin: GPIO {LIGHT_PIN}")
-    logger.info(f"🚗 Garage stepper pins: {STEPPER_PINS}")
-    logger.info(f"🚪 Door servo pin: GPIO {SERVO_PIN}")
+    logger.info(f"🚗 Garage servo pin: GPIO {GARAGE_SERVO_PIN}")
+    logger.info(f"🚪 Front door servo pin: GPIO {SERVO_PIN}")
 
 
-def set_servo_angle(angle: int) -> bool:
+def set_servo_angle(pwm, angle: int, label: str = "Servo") -> bool:
     """
-    Move the servo motor to an angle between 0 and 180 degrees.
+    Move a servo motor to an angle between 0 and 180 degrees.
 
     TEACHING: A servo motor has a built-in gearbox and position sensor.
     You tell it WHERE to go (as an angle), not how to get there.
@@ -148,6 +136,9 @@ def set_servo_angle(angle: int) -> bool:
 
     Why 2% and 12%? That's the standard pulse width range (1ms–2ms)
     at 50 Hz that SG90-type hobby servos understand.
+
+    This function is shared by both the garage door and the front door servos —
+    we just pass in the correct PWM object (GARAGE_SERVO_PWM or SERVO_PWM).
     """
     try:
         if not 0 <= angle <= 180:
@@ -156,98 +147,20 @@ def set_servo_angle(angle: int) -> bool:
 
         # Convert the 0-180° range into the 2-12% duty cycle range
         duty = (angle / 180.0) * 10 + 2
-        SERVO_PWM.ChangeDutyCycle(duty)
+        pwm.ChangeDutyCycle(duty)
         time.sleep(0.8)            # Wait 0.8 seconds for the servo to physically move
-        SERVO_PWM.ChangeDutyCycle(0)  # Stop sending pulses to prevent jitter/humming
+        pwm.ChangeDutyCycle(0)     # Stop sending pulses to prevent jitter/humming
 
-        logger.info(f"🚪 Door servo → {angle}°")
+        logger.info(f"🔧 {label} → {angle}°")
         return True
 
     except Exception as e:
-        logger.error(f"❌ Servo control failed: {e}")
+        logger.error(f"❌ Servo control failed ({label}): {e}")
         return False
 
 
 # =============================================================================
-# SECTION 4: STEPPER MOTOR CONTROL
-# =============================================================================
-# TEACHING: A stepper motor moves in tiny fixed "steps" (not continuous spin).
-# We control it with 4 wires. By energising these wires in a specific
-# repeating pattern (the STEP_SEQUENCE), the motor turns one step at a time.
-#
-# "Half-stepping" (8 patterns instead of 4) gives smoother movement
-# and finer position control at the cost of slightly less torque.
-#
-# The ULN2003 driver board sits between the Pi and the motor because
-# the Pi's GPIO pins can only supply ~16mA — not enough to drive a motor.
-# The ULN2003 uses transistors to amplify that signal using 5V power.
-
-STEP_SEQUENCE = [
-    #  IN1  IN2  IN3  IN4   ← ULN2003 input pins (driven by GPIO 27,18,22,24)
-    [  1,   0,   0,   1  ],  # Step 1
-    [  1,   0,   0,   0  ],  # Step 2
-    [  1,   1,   0,   0  ],  # Step 3
-    [  0,   1,   0,   0  ],  # Step 4
-    [  0,   1,   1,   0  ],  # Step 5
-    [  0,   0,   1,   0  ],  # Step 6
-    [  0,   0,   1,   1  ],  # Step 7
-    [  0,   0,   0,   1  ],  # Step 8 → then loop back to Step 1
-]
-
-
-def stepper_step(sequence, steps, delay=0.002):
-    """
-    Energise the stepper motor coils one step at a time.
-
-    TEACHING: 'steps' is how many times we go through the full 8-pattern cycle.
-    'delay' is how long we wait between each pattern — lower = faster motor,
-    but too fast and the motor will stall (miss steps) or vibrate in place.
-    """
-    for _ in range(steps):             # Repeat for the number of requested steps
-        for pattern in sequence:       # Go through each of the 8 coil patterns
-            for pin, value in zip(STEPPER_PINS, pattern):  # Set each GPIO pin
-                GPIO.output(pin, value)
-            time.sleep(delay)          # Pause so the motor has time to physically move
-    stop_stepper()                     # Always de-energise coils when done (saves power)
-
-
-def rotate_stepper(direction: str, steps: int = 512):
-    """
-    Rotate the stepper motor forwards or backwards.
-
-    TEACHING: Reversing the sequence list reverses the motor direction.
-    That's how a stepper motor works — the order of coil energisation
-    determines which way the shaft spins.
-    """
-    if direction == "forward":
-        seq = STEP_SEQUENCE              # Normal order → opens the garage
-    else:
-        seq = list(reversed(STEP_SEQUENCE))  # Reversed order → closes the garage
-
-    stepper_step(seq, steps)
-
-    # Track position for diagnostics
-    if direction == "forward":
-        motor_state["position"] += steps
-    else:
-        motor_state["position"] = max(0, motor_state["position"] - steps)
-
-
-def stop_stepper():
-    """
-    Cut power to all stepper motor coils.
-
-    TEACHING: If you leave the coils energised after the motor stops,
-    it draws current and heats up for no reason. Always de-energise
-    when the motor is not actively moving.
-    """
-    for pin in STEPPER_PINS:
-        GPIO.output(pin, GPIO.LOW)
-    motor_state["running"] = False
-
-
-# =============================================================================
-# SECTION 5: MQTT EVENT HANDLERS
+# SECTION 4: MQTT EVENT HANDLERS
 # =============================================================================
 # TEACHING: MQTT uses an "event-driven" design. Instead of your code
 # constantly checking "has a message arrived?", the library calls these
@@ -366,7 +279,7 @@ def on_message(client, userdata, msg):
 
 
 # =============================================================================
-# SECTION 6: DEVICE CONTROL FUNCTIONS
+# SECTION 5: DEVICE CONTROL FUNCTIONS
 # =============================================================================
 # TEACHING: Each function here controls ONE physical device. They all follow
 # the same pattern: try to do the action, log what happened, return True/False
@@ -392,30 +305,22 @@ def control_light(state: bool) -> bool:
 
 def control_garage_door(open_door: bool) -> bool:
     """
-    Open or close the garage door by rotating the stepper motor.
+    Open or close the garage door using the servo motor.
 
-    TEACHING: The motor only turns — it doesn't know where it is.
-    We rely on rotating the same number of steps every time (GARAGE_TRAVEL_STEPS)
-    to reliably open or close the door. If you change the physical setup
-    you may need to adjust GARAGE_TRAVEL_STEPS at the top of this file.
+    TEACHING: The servo understands angles, not on/off.
+    We map "open" to 90° and "closed" to 0°.
+    Both the garage door and front door use the same type of servo —
+    we just call set_servo_angle() with the correct PWM object for each.
+    You can adjust these angles to match how your servo is physically mounted.
     """
     try:
-        motor_state["running"] = True
-
-        if open_door:
-            logger.info("🚗 Opening garage door — motor rotating forward...")
-            rotate_stepper("forward", GARAGE_TRAVEL_STEPS)
-        else:
-            logger.info("🚗 Closing garage door — motor rotating in reverse...")
-            rotate_stepper("reverse", GARAGE_TRAVEL_STEPS)
-
-        motor_state["running"]     = False
-        motor_state["last_action"] = "open" if open_door else "close"
-        return True
-
+        angle   = 90 if open_door else 0  # OPEN = 90°, CLOSED = 0°
+        success = set_servo_angle(GARAGE_SERVO_PWM, angle, label="Garage Door Servo")
+        if success:
+            logger.info(f"🚗 Garage Door → {'OPEN (90°)' if open_door else 'CLOSED (0°)'}")
+        return success
     except Exception as e:
         logger.error(f"❌ Garage door error: {e}")
-        motor_state["running"] = False
         return False
 
 
@@ -429,7 +334,7 @@ def control_door(state: bool) -> bool:
     """
     try:
         angle   = 90 if state else 0  # OPEN = 90°, CLOSED = 0°
-        success = set_servo_angle(angle)
+        success = set_servo_angle(SERVO_PWM, angle, label="Front Door Servo")
         if success:
             logger.info(f"🚪 Front Door → {'OPEN (90°)' if state else 'CLOSED (0°)'}")
         return success
@@ -439,38 +344,7 @@ def control_door(state: bool) -> bool:
 
 
 # =============================================================================
-# SECTION 7: MOTOR UTILITY FUNCTIONS
-# =============================================================================
-
-def stop_garage_emergency():
-    """
-    Immediately cut power to the garage motor.
-
-    TEACHING: An emergency stop ignores the normal flow — it just directly
-    calls stop_stepper() to de-energise all motor coils right now.
-    This is called on shutdown or crash so the motor isn't left on.
-    """
-    try:
-        logger.warning("🚨 EMERGENCY GARAGE STOP")
-        stop_stepper()
-    except Exception as e:
-        logger.error(f"❌ Emergency stop failed: {e}")
-
-
-def get_garage_motor_status() -> dict:
-    """Return a snapshot of the motor's current state (for diagnostics/debugging)."""
-    return {
-        "running":    motor_state["running"],
-        "position":   motor_state["position"],
-        "gpio_states": {
-            f"pin{idx+1}": GPIO.input(pin)
-            for idx, pin in enumerate(STEPPER_PINS)
-        }
-    }
-
-
-# =============================================================================
-# SECTION 8: MQTT PUBLISHING (sending data BACK to the iPad)
+# SECTION 6: MQTT PUBLISHING (sending data BACK to the iPad)
 # =============================================================================
 # TEACHING: MQTT is bi-directional. This section handles the Pi → iPad direction.
 # After we carry out a command, we publish the new device state so the app's
@@ -493,20 +367,11 @@ def publish_device_status(device: str, status: bool):
 
         client.publish(f"home/{device}/status", status_msg, retain=True)
 
-        # For the garage, also publish detailed motor diagnostics
-        if device == "garage":
-            client.publish(
-                f"home/{device}/motor_status",
-                json.dumps(get_garage_motor_status()),
-                retain=True
-            )
-
         # Publish an overall snapshot of all device states
         system_status = {
-            "timestamp":   datetime.now().isoformat(),
-            "devices":     device_states.copy(),
-            "garage_motor": motor_state.copy(),
-            "controller":  "online"
+            "timestamp":  datetime.now().isoformat(),
+            "devices":    device_states.copy(),
+            "controller": "online"
         }
         client.publish(TOPIC_STATUS, json.dumps(system_status), retain=True)
 
@@ -521,13 +386,12 @@ def publish_system_status(status: str, message: str = ""):
             "status":       status,
             "timestamp":    datetime.now().isoformat(),
             "message":      message,
-            "version":      "3.2",
+            "version":      "4.0",
             "controller":   "Simpson's House GPIO Controller",
-            "motor_driver": "ULN2003",
             "gpio_pins": {
-                "light":           LIGHT_PIN,
-                "garage_stepper":  STEPPER_PINS,
-                "servo":           SERVO_PIN
+                "light":         LIGHT_PIN,
+                "garage_servo":  GARAGE_SERVO_PIN,
+                "door_servo":    SERVO_PIN
             }
         }
         client.publish(TOPIC_SYSTEM, json.dumps(system_info), retain=True)
@@ -545,10 +409,9 @@ def publish_error(topic: str, error_msg: str):
     """
     try:
         error_info = {
-            "error":        error_msg,
-            "timestamp":    datetime.now().isoformat(),
-            "topic":        topic,
-            "motor_status": get_garage_motor_status() if "garage" in topic else None
+            "error":     error_msg,
+            "timestamp": datetime.now().isoformat(),
+            "topic":     topic
         }
         client.publish(f"{topic}/error", json.dumps(error_info))
     except Exception as e:
@@ -556,7 +419,7 @@ def publish_error(topic: str, error_msg: str):
 
 
 # =============================================================================
-# SECTION 9: UTILITY FUNCTIONS
+# SECTION 7: UTILITY FUNCTIONS
 # =============================================================================
 
 def get_mqtt_error_message(rc: int) -> str:
@@ -571,11 +434,11 @@ def get_mqtt_error_message(rc: int) -> str:
 
 
 # =============================================================================
-# SECTION 10: SHUTDOWN HANDLING
+# SECTION 8: SHUTDOWN HANDLING
 # =============================================================================
 # TEACHING: When the program receives a kill signal (e.g. you press Ctrl+C,
 # or systemd stops the service), we want to:
-#   • Stop the motor immediately so it doesn't stay energised
+#   • Stop both servo motors
 #   • Turn off all LEDs
 #   • Tell the MQTT broker we are going offline
 #   • Release the GPIO pins so other programs can use them
@@ -592,13 +455,14 @@ def cleanup_and_exit():
     logger.info("🧹 Cleaning up Simpson's House...")
 
     try:
-        stop_garage_emergency()    # Motor off first — safety priority
         GPIO.output(LIGHT_PIN, GPIO.LOW)  # Light off
-        stop_stepper()             # All stepper coils off
 
+        if GARAGE_SERVO_PWM:
+            GARAGE_SERVO_PWM.stop()  # Stop garage servo PWM signal
         if SERVO_PWM:
-            SERVO_PWM.stop()       # Stop generating PWM signal
-        GPIO.cleanup()             # Release all GPIO pins back to the OS
+            SERVO_PWM.stop()         # Stop front door servo PWM signal
+
+        GPIO.cleanup()               # Release all GPIO pins back to the OS
         logger.info("✅ GPIO cleaned up")
 
     except Exception as e:
@@ -618,7 +482,7 @@ def cleanup_and_exit():
 
 
 # =============================================================================
-# SECTION 11: ENTRY POINT (main)
+# SECTION 9: ENTRY POINT (main)
 # =============================================================================
 # TEACHING: In Python, the block `if __name__ == "__main__":` means
 # "only run main() when this file is executed directly" (not when it's
@@ -636,7 +500,7 @@ def main():
     """Start the Simpson's House smart home controller."""
     global client
 
-    logger.info("🏠 Starting Simpson's House Smart Home Controller v3.2")
+    logger.info("🏠 Starting Simpson's House Smart Home Controller v4.0")
     logger.info("📺 'D'oh! Welcome to the smartest house in Springfield!'")
 
     # Register OS signal handlers so we shut down cleanly on Ctrl+C or systemd stop
@@ -679,10 +543,6 @@ def main():
         logger.info("⌨️  Stopped by user (Ctrl+C)")
     except Exception as e:
         logger.error(f"❌ Fatal error: {e}")
-        try:
-            stop_garage_emergency()
-        except Exception:
-            pass
     finally:
         cleanup_and_exit()
 

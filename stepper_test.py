@@ -2,7 +2,17 @@
 """
 🏠 Simpson's House Stepper Motor Test Script
 Verifies basic operation of a 28BYJ-48 stepper motor using ULN2003 driver.
+
+⚠️  DEPRECATED — The garage door now uses a servo motor (GPIO 27) instead of
+    the ULN2003 stepper motor. This script is kept for reference only.
+    Use gpio_test.py to test the current hardware setup.
 """
+
+import sys
+print("⚠️  DEPRECATED: The garage door now uses a servo motor (GPIO 27), not a stepper.")
+print("   Use gpio_test.py to test the current hardware configuration.")
+print("   This script is kept for reference only.")
+sys.exit(0)
 
 import RPi.GPIO as GPIO
 import time
