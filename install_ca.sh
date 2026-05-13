@@ -78,8 +78,12 @@ EOF'
 # -----------------------------------------------------------------------------
 
 check_existing_certificate() {
-    if grep -q "wirelesstkc" /etc/ssl/certs/ca-certificates.crt 2>/dev/null; then
-        log "TKC FortiGate CA certificate is already installed in the trust store."
+    # Check the cert file exists AND is already trusted by the system.
+    # NOTE: grep-ing ca-certificates.crt for a name will never work —
+    # PEM bundle data is base64-encoded binary, not readable text.
+    # We use openssl verify instead.
+    if [ -f "$CERT_PATH" ] && openssl verify "$CERT_PATH" >/dev/null 2>&1; then
+        log "TKC FortiGate CA certificate is already installed and trusted."
         return 0
     fi
     return 1
@@ -130,7 +134,10 @@ download_certificate() {
 
 update_trust_store() {
     log "Updating system certificate trust store..."
-    if sudo update-ca-certificates 2>/dev/null; then
+    # Use --fresh to do a full rebuild — avoids the "0 added" stale-symlink
+    # problem where leftover symlinks from a previous run fool update-ca-certificates
+    # into skipping the cert even though it isn't in the bundle yet.
+    if sudo update-ca-certificates --fresh 2>/dev/null; then
         log "Certificate trust store updated successfully"
         return 0
     else
@@ -148,12 +155,19 @@ update_trust_store() {
 verify_installation() {
     log "Verifying certificate installation..."
 
-    # 1. Trust store check
-    if ! grep -q "wirelesstkc" /etc/ssl/certs/ca-certificates.crt 2>/dev/null; then
-        error "Certificate not found in trust store after update"
-        return 1
+    # 1. Trust store check — use openssl verify, NOT grep.
+    # ca-certificates.crt is a PEM bundle of base64-encoded binary data;
+    # cert names never appear as readable text inside it.
+    if ! openssl verify "$CERT_PATH" >/dev/null 2>&1; then
+        error "Certificate not trusted by system store (openssl verify failed)"
+        error "Trying a full trust store rebuild..."
+        sudo update-ca-certificates --fresh 2>/dev/null || true
+        if ! openssl verify "$CERT_PATH" >/dev/null 2>&1; then
+            error "Certificate still not trusted after rebuild"
+            return 1
+        fi
     fi
-    log "✅ Certificate found in trust store"
+    log "✅ Certificate is trusted by system store"
 
     # 2. Show cert details for confirmation
     log "Certificate details:"
