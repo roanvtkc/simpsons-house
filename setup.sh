@@ -159,7 +159,8 @@ check_system() {
 install_packages() {
     step "Installing system packages..."
 
-    local packages="git python3-venv mosquitto mosquitto-clients avahi-daemon avahi-utils build-essential python3-dev"
+    # python3-lgpio replaces the deprecated RPi.GPIO system package on trixie+
+    local packages="git python3-venv mosquitto mosquitto-clients avahi-daemon avahi-utils build-essential python3-dev python3-lgpio"
     log "Packages to install: $packages"
 
     log "Updating package lists..."
@@ -245,32 +246,18 @@ setup_python_env() {
     # Install paho-mqtt (required)
     run_cmd "$VENV_PYTHON -m pip install paho-mqtt" "Installing paho-mqtt"
 
-    # Install GPIO library — RPi.GPIO for Python ≤3.12, lgpio for 3.13+
-    local python_minor
-    python_minor=$($VENV_PYTHON -c "import sys; print(sys.version_info.minor)")
-    local python_major
-    python_major=$($VENV_PYTHON -c "import sys; print(sys.version_info.major)")
-
-    log "Python version in venv: $python_major.$python_minor"
-
-    if [ "$python_major" -eq 3 ] && [ "$python_minor" -ge 13 ]; then
-        warn "Python 3.13+ detected — RPi.GPIO is not supported on this version"
-        log "Installing lgpio as GPIO library..."
-        if $VENV_PYTHON -m pip install lgpio >> "$DEBUG_LOG" 2>&1; then
-            log "✅ lgpio installed"
-            # Also try rpi-lgpio which provides an RPi.GPIO-compatible API
-            if $VENV_PYTHON -m pip install rpi-lgpio >> "$DEBUG_LOG" 2>&1; then
-                log "✅ rpi-lgpio installed (RPi.GPIO-compatible wrapper)"
-            else
-                warn "rpi-lgpio not available — mqttlistener.py may need updating for lgpio API"
-            fi
-        else
-            warn "lgpio install failed — trying RPi.GPIO anyway (may not work)"
-            $VENV_PYTHON -m pip install RPi.GPIO >> "$DEBUG_LOG" 2>&1 || \
-                warn "RPi.GPIO also failed — GPIO control will not work until a compatible library is installed"
-        fi
+    # GPIO library — rpi-lgpio is the modern replacement for the deprecated
+    # RPi.GPIO pip package. It provides an identical API (import RPi.GPIO
+    # still works) but is backed by lgpio which supports Python 3.13+.
+    # python3-lgpio was already installed via apt above.
+    log "Installing GPIO library (rpi-lgpio replaces deprecated RPi.GPIO)..."
+    if $VENV_PYTHON -m pip install rpi-lgpio >> "$DEBUG_LOG" 2>&1; then
+        log "✅ rpi-lgpio installed"
     else
-        run_cmd "$VENV_PYTHON -m pip install RPi.GPIO" "Installing RPi.GPIO"
+        # Fallback: try legacy RPi.GPIO (still works on some builds)
+        warn "rpi-lgpio install failed — trying legacy RPi.GPIO as fallback"
+        $VENV_PYTHON -m pip install RPi.GPIO >> "$DEBUG_LOG" 2>&1 || \
+            warn "RPi.GPIO also failed — GPIO hardware control will not work"
     fi
 
     # Verify imports
@@ -281,14 +268,13 @@ setup_python_env() {
         error "❌ paho-mqtt import failed"
     fi
 
-    # Try RPi.GPIO first, then lgpio, then rpi-lgpio
+    # rpi-lgpio exposes the exact RPi.GPIO module name, so this import
+    # works whether rpi-lgpio or legacy RPi.GPIO is installed
     if $VENV_PYTHON -c "import RPi.GPIO" >> "$DEBUG_LOG" 2>&1; then
         log "✅ RPi.GPIO import OK"
-    elif $VENV_PYTHON -c "import lgpio" >> "$DEBUG_LOG" 2>&1; then
-        log "✅ lgpio import OK (RPi.GPIO replacement)"
     else
-        warn "No GPIO library imported successfully — hardware control will fail"
-        warn "Run: $VENV_PYTHON -m pip install rpi-lgpio"
+        warn "RPi.GPIO import failed — GPIO hardware control will not work"
+        warn "Try manually: $VENV_PYTHON -m pip install rpi-lgpio"
     fi
 }
 
