@@ -1,9 +1,8 @@
 #!/bin/bash
 set -e
 
-# Simpson's House Complete Setup Script v3.2 with ULN2003 Motor Driver
+# Simpson's House Complete Setup Script v3.3
 # Sets up MQTT + WebSocket + GPIO control for iOS app communication
-# Now includes ULN2003 motor driver for professional stepper motor control
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="/tmp/simpsons_house_setup.log"
@@ -16,9 +15,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Enhanced logging functions
+# Logging functions
 log() {
     local timestamp=$(date +'%Y-%m-%d %H:%M:%S')
     echo -e "${GREEN}[${timestamp}]${NC} $1" | tee -a "$LOG_FILE"
@@ -49,14 +48,15 @@ step() {
     echo "[${timestamp}] STEP: $1" >> "$DEBUG_LOG"
 }
 
-# Enhanced command execution with logging
+# Run a command with logging — uses python -m pip style paths to avoid
+# bare-command PATH issues inside eval after venv activation
 run_cmd() {
     local cmd="$1"
     local description="$2"
-    
+
     debug "Executing: $cmd"
     step "$description"
-    
+
     if eval "$cmd" >> "$DEBUG_LOG" 2>&1; then
         log "✅ $description - SUCCESS"
         return 0
@@ -69,228 +69,251 @@ run_cmd() {
     fi
 }
 
-# Check if running as root
+# -----------------------------------------------------------------------------
+# Check root
+# -----------------------------------------------------------------------------
+
 check_root() {
     if [[ $EUID -eq 0 ]]; then
-        error "This script should not be run as root. Run as pi user with sudo privileges."
+        error "Run as the pi user, not root. The script uses sudo internally."
         exit 1
     fi
     log "✅ Running as non-root user: $(whoami)"
 }
 
-# Sync time with corporate domain controllers
-sync_corporate_time() {
-    step "Synchronizing time with corporate domain controllers..."
-    
-    # Install ntpdate if not available (this worked for you)
-    debug "Installing ntpdate for time synchronization..."
-    if ! command -v ntpdate >/dev/null 2>&1; then
-        log "Installing ntpdate..."
-        if sudo apt install -y ntpdate --fix-missing >> "$DEBUG_LOG" 2>&1; then
-            log "✅ ntpdate installed successfully"
-        else
-            warn "⚠️ Could not install ntpdate, trying manual time sync"
-        fi
-    else
-        log "✅ ntpdate already available"
+# -----------------------------------------------------------------------------
+# Time sync
+# -----------------------------------------------------------------------------
+# ntpdate was removed from Debian trixie. We use systemd-timesyncd with
+# reliable public NTP servers, then fall back to reading the Date: header
+# from the internal cert server (same approach as install_ca.sh).
+
+sync_system_time() {
+    step "Synchronising system clock..."
+    log "Current Pi time: $(date)"
+
+    # Configure reliable NTP servers
+    sudo bash -c 'cat > /etc/systemd/timesyncd.conf << EOF
+[Time]
+NTP=pool.ntp.org time.cloudflare.com
+FallbackNTP=time.google.com
+EOF'
+    sudo systemctl restart systemd-timesyncd
+    sleep 5
+
+    if timedatectl status | grep -q "System clock synchronized: yes"; then
+        log "✅ System clock synchronised via NTP: $(date)"
+        return 0
     fi
-    
-    # Sync with domain controllers
-    log "🕐 Attempting time sync with Domain Controllers..."
-    local time_synced=false
-    
-    for dc in 10.20.1.30 10.20.1.31; do
-        debug "Trying DC: $dc"
-        if ping -c 1 -W 3 $dc >/dev/null 2>&1; then
-            debug "DC $dc is reachable"
-            if timeout 10 sudo ntpdate -s $dc >> "$DEBUG_LOG" 2>&1; then
-                log "✅ Successfully synced time with DC $dc"
-                time_synced=true
-                break
-            else
-                debug "❌ Time sync failed with DC $dc"
-            fi
-        else
-            debug "❌ DC $dc is not reachable"
-        fi
-    done
-    
-    if [ "$time_synced" = false ]; then
-        warn "⚠️ Could not sync with domain controllers"
-        warn "You may need to set time manually: sudo timedatectl set-time 'YYYY-MM-DD HH:MM:SS'"
-    fi
-    
-    local current_time=$(date)
-    log "Current system time: $current_time"
-    
-    # Check if time looks reasonable (year should be 2025)
-    local year=$(date +%Y)
-    if [ "$year" -eq 2025 ]; then
-        log "✅ System time appears correct"
+
+    warn "NTP sync not confirmed (NTP may be blocked on this network)"
+    warn "Trying HTTP date header fallback from internal server..."
+
+    local http_date
+    http_date=$(curl -sI --max-time 5 "http://10.20.1.83:8081/" 2>/dev/null \
+                | grep -i "^Date:" | sed 's/[Dd]ate: //' | tr -d '\r\n')
+
+    if [ -n "$http_date" ]; then
+        sudo date -s "$http_date" >/dev/null 2>&1
+        log "✅ Clock set via HTTP header: $(date)"
     else
-        warn "⚠️ System time may still be incorrect (year: $year)"
-        warn "Package repositories may reject updates with incorrect time"
+        warn "Could not sync clock automatically — continuing anyway"
+        warn "If package installs fail with date errors, run: sudo date -s 'YYYY-MM-DD HH:MM:SS'"
+    fi
+
+    # Sanity-check: year should be somewhere reasonable
+    local year
+    year=$(date +%Y)
+    if [ "$year" -lt 2024 ] || [ "$year" -gt 2030 ]; then
+        warn "Year $year looks wrong — package repos may reject updates"
+    else
+        log "✅ System time appears correct ($(date))"
     fi
 }
 
-# Check system requirements
+# -----------------------------------------------------------------------------
+# System requirements
+# -----------------------------------------------------------------------------
+
 check_system() {
     step "Checking system requirements..."
-    
-    # Check OS
-    local os_info=$(cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2)
-    log "Operating System: $os_info"
-    
-    # Check architecture
-    local arch=$(uname -m)
-    log "Architecture: $arch"
-    
-    # Check Python version
-    local python_version=$(python3 --version 2>/dev/null || echo "Python3 not found")
-    log "Python: $python_version"
-    
-    # Check available space
-    local disk_space=$(df -h . | tail -1 | awk '{print $4}')
-    log "Available disk space: $disk_space"
-    
-    # Check memory
-    local memory=$(free -h | grep Mem | awk '{print $2}')
-    log "Total memory: $memory"
-    
-    # Check network connectivity
-    if ping -c 1 8.8.8.8 >/dev/null 2>&1; then
+
+    log "Operating System: $(grep PRETTY_NAME /etc/os-release | cut -d'"' -f2)"
+    log "Architecture: $(uname -m)"
+    log "Python: $(python3 --version 2>/dev/null || echo 'Python3 not found')"
+    log "Available disk space: $(df -h . | tail -1 | awk '{print $4}')"
+    log "Total memory: $(free -h | grep Mem | awk '{print $2}')"
+
+    # Check internet via HTTPS to a real host — 8.8.8.8 is blocked by FortiGate
+    if curl -sf --max-time 10 https://deb.debian.org > /dev/null 2>&1; then
         log "✅ Internet connectivity: Available"
     else
-        warn "❌ Internet connectivity: Limited or unavailable"
-        log "Note: Will attempt to use corporate network resources"
+        warn "Internet connectivity limited — will attempt using apt mirrors directly"
     fi
 }
 
-# Install system packages with detailed logging
+# -----------------------------------------------------------------------------
+# System packages
+# -----------------------------------------------------------------------------
+
 install_packages() {
     step "Installing system packages..."
-    
+
     local packages="git python3-venv mosquitto mosquitto-clients avahi-daemon avahi-utils build-essential python3-dev"
     log "Packages to install: $packages"
-    
-    # Update package lists with time-sensitive retry
-    log "Updating package lists (this may take time in corporate environments)..."
-    local update_attempts=0
-    local max_attempts=3
-    
-    while [ $update_attempts -lt $max_attempts ]; do
-        update_attempts=$((update_attempts + 1))
-        debug "Package update attempt $update_attempts of $max_attempts"
-        
+
+    log "Updating package lists..."
+    local attempt=0
+    local max=3
+    while [ $attempt -lt $max ]; do
+        attempt=$((attempt + 1))
+        debug "apt update attempt $attempt of $max"
         if sudo apt update >> "$DEBUG_LOG" 2>&1; then
-            log "✅ Package lists updated successfully"
+            log "✅ Package lists updated"
             break
         else
-            if [ $update_attempts -eq $max_attempts ]; then
-                error "❌ Failed to update package lists after $max_attempts attempts"
-                error "This is often caused by:"
-                error "  - Incorrect system time (check: date)"
-                error "  - Corporate firewall blocking repositories"
-                error "  - Network connectivity issues"
-                debug "Checking current time: $(date)"
+            if [ $attempt -eq $max ]; then
+                error "Failed to update package lists after $max attempts"
+                error "Check: system time ($(date)), network, FortiGate cert installed?"
                 return 1
-            else
-                warn "⚠️ Package update attempt $update_attempts failed, retrying..."
-                sleep 5
             fi
+            warn "apt update attempt $attempt failed, retrying in 5s..."
+            sleep 5
         fi
     done
-    
-    # Install packages one by one for better error tracking
+
     for package in $packages; do
-        debug "Checking if $package is already installed..."
         if dpkg -l | grep -q "^ii  $package "; then
             log "✅ $package - already installed"
         else
-            debug "Installing package: $package"
-            if sudo apt install -y $package >> "$DEBUG_LOG" 2>&1; then
-                log "✅ $package - installed successfully"
+            debug "Installing: $package"
+            if sudo apt install -y "$package" >> "$DEBUG_LOG" 2>&1; then
+                log "✅ $package - installed"
             else
-                warn "⚠️ $package - installation failed, continuing anyway"
-                debug "Failed package: $package"
+                warn "⚠️ $package - installation failed, continuing"
             fi
         fi
     done
-    
-    # Verify critical installations
-    step "Verifying critical package installations..."
-    local critical_packages="git python3-venv mosquitto"
-    local missing_critical=""
-    
-    for package in $critical_packages; do
+
+    # Verify critical packages
+    step "Verifying critical packages..."
+    local missing=""
+    for package in git python3-venv mosquitto; do
         if dpkg -l | grep -q "^ii  $package "; then
-            log "✅ $package - verified installed"
+            log "✅ $package - verified"
         else
-            error "❌ $package - CRITICAL PACKAGE MISSING"
-            missing_critical="$missing_critical $package"
+            error "❌ $package - MISSING"
+            missing="$missing $package"
         fi
     done
-    
-    if [ -n "$missing_critical" ]; then
-        error "❌ Critical packages missing:$missing_critical"
-        error "Setup cannot continue without these packages"
-        error "Please contact IT support or install manually"
+
+    if [ -n "$missing" ]; then
+        error "Critical packages missing:$missing — cannot continue"
         return 1
     fi
 }
 
-# Setup Python environment with detailed logging
+# -----------------------------------------------------------------------------
+# Python virtual environment
+# -----------------------------------------------------------------------------
+# Uses `python -m pip` throughout — bare `pip` is unreliable after venv
+# activation inside eval because PATH expansion can vary by shell/version.
+
 setup_python_env() {
     step "Setting up Python virtual environment..."
-    
+
     cd "$SCRIPT_DIR"
     debug "Working directory: $(pwd)"
-    
+
     if [ -d "mqttenv" ]; then
-        log "Virtual environment already exists"
-        run_cmd "rm -rf mqttenv" "Removing existing virtual environment"
+        log "Removing existing virtual environment..."
+        rm -rf mqttenv
     fi
-    
+
     run_cmd "python3 -m venv mqttenv" "Creating Python virtual environment"
-    
-    debug "Activating virtual environment..."
+
+    # Activate and capture the venv python path explicitly
     source mqttenv/bin/activate
-    log "✅ Virtual environment activated"
-    
-    # Check Python version in venv
-    local venv_python_version=$(python --version)
-    log "Virtual environment Python: $venv_python_version"
-    
-    run_cmd "pip install --upgrade pip setuptools wheel" "Upgrading pip and setuptools"
-    run_cmd "pip install paho-mqtt RPi.GPIO" "Installing Python packages"
-    
-    # Verify Python packages
+    local VENV_PYTHON="$SCRIPT_DIR/mqttenv/bin/python"
+    local VENV_PIP="$SCRIPT_DIR/mqttenv/bin/python -m pip"
+    log "✅ Virtual environment activated — Python: $($VENV_PYTHON --version)"
+
+    # Upgrade pip using python -m pip (avoids bare 'pip' PATH issues)
+    run_cmd "$VENV_PYTHON -m pip install --upgrade pip setuptools wheel" \
+            "Upgrading pip and setuptools"
+
+    # Install paho-mqtt (required)
+    run_cmd "$VENV_PYTHON -m pip install paho-mqtt" "Installing paho-mqtt"
+
+    # Install GPIO library — RPi.GPIO for Python ≤3.12, lgpio for 3.13+
+    local python_minor
+    python_minor=$($VENV_PYTHON -c "import sys; print(sys.version_info.minor)")
+    local python_major
+    python_major=$($VENV_PYTHON -c "import sys; print(sys.version_info.major)")
+
+    log "Python version in venv: $python_major.$python_minor"
+
+    if [ "$python_major" -eq 3 ] && [ "$python_minor" -ge 13 ]; then
+        warn "Python 3.13+ detected — RPi.GPIO is not supported on this version"
+        log "Installing lgpio as GPIO library..."
+        if $VENV_PYTHON -m pip install lgpio >> "$DEBUG_LOG" 2>&1; then
+            log "✅ lgpio installed"
+            # Also try rpi-lgpio which provides an RPi.GPIO-compatible API
+            if $VENV_PYTHON -m pip install rpi-lgpio >> "$DEBUG_LOG" 2>&1; then
+                log "✅ rpi-lgpio installed (RPi.GPIO-compatible wrapper)"
+            else
+                warn "rpi-lgpio not available — mqttlistener.py may need updating for lgpio API"
+            fi
+        else
+            warn "lgpio install failed — trying RPi.GPIO anyway (may not work)"
+            $VENV_PYTHON -m pip install RPi.GPIO >> "$DEBUG_LOG" 2>&1 || \
+                warn "RPi.GPIO also failed — GPIO control will not work until a compatible library is installed"
+        fi
+    else
+        run_cmd "$VENV_PYTHON -m pip install RPi.GPIO" "Installing RPi.GPIO"
+    fi
+
+    # Verify imports
     step "Verifying Python package installations..."
-    python -c "import paho.mqtt.client as mqtt; print('paho-mqtt imported successfully')" >> "$DEBUG_LOG" 2>&1 && log "✅ paho-mqtt - verified" || error "❌ paho-mqtt - import failed"
-    python -c "import RPi.GPIO as GPIO; print('RPi.GPIO imported successfully')" >> "$DEBUG_LOG" 2>&1 && log "✅ RPi.GPIO - verified" || error "❌ RPi.GPIO - import failed"
+    if $VENV_PYTHON -c "import paho.mqtt.client" >> "$DEBUG_LOG" 2>&1; then
+        log "✅ paho-mqtt import OK"
+    else
+        error "❌ paho-mqtt import failed"
+    fi
+
+    # Try RPi.GPIO first, then lgpio, then rpi-lgpio
+    if $VENV_PYTHON -c "import RPi.GPIO" >> "$DEBUG_LOG" 2>&1; then
+        log "✅ RPi.GPIO import OK"
+    elif $VENV_PYTHON -c "import lgpio" >> "$DEBUG_LOG" 2>&1; then
+        log "✅ lgpio import OK (RPi.GPIO replacement)"
+    else
+        warn "No GPIO library imported successfully — hardware control will fail"
+        warn "Run: $VENV_PYTHON -m pip install rpi-lgpio"
+    fi
 }
 
-# Configure Mosquitto with detailed logging
+# -----------------------------------------------------------------------------
+# Mosquitto
+# -----------------------------------------------------------------------------
+
 configure_mosquitto() {
     step "Configuring Mosquitto MQTT broker..."
-    
-    debug "Creating Mosquitto configuration directory..."
+
     sudo mkdir -p /etc/mosquitto/conf.d
-    
-    debug "Writing Mosquitto configuration..."
+
     sudo tee /etc/mosquitto/conf.d/01-simpsons-house.conf >/dev/null <<EOF
-# Simpson's House MQTT Configuration with ULN2003 Motor Driver
-# TCP listener for standard MQTT clients
+# Simpson's House MQTT Configuration
+# TCP for standard MQTT clients
 listener 1883 0.0.0.0
 protocol mqtt
 allow_anonymous true
 
-# WebSocket listener for iOS/web clients  
+# WebSocket for iOS app
 listener 9001 0.0.0.0
 protocol websockets
 allow_anonymous true
 
-# Logging configuration
+# Logging
 log_dest file /var/log/mosquitto/mosquitto.log
 log_type error
 log_type warning
@@ -299,98 +322,91 @@ log_type information
 connection_messages true
 log_timestamp true
 
-# Performance settings
+# Performance
 max_connections 100
 max_inflight_messages 20
 max_queued_messages 100
 message_size_limit 1024
 EOF
     log "✅ Mosquitto configuration written"
-    
-    # Clean up duplicate log entries
-    run_cmd "sudo sed -i '/^log_dest file/d' /etc/mosquitto/mosquitto.conf 2>/dev/null || true" "Cleaning duplicate log entries"
-    
-    # Create log directory
+
+    # Remove duplicate log_dest lines from main config if present
+    sudo sed -i '/^log_dest file/d' /etc/mosquitto/mosquitto.conf 2>/dev/null || true
+
     run_cmd "sudo mkdir -p /var/log/mosquitto" "Creating Mosquitto log directory"
     run_cmd "sudo chown mosquitto:mosquitto /var/log/mosquitto" "Setting Mosquitto log permissions"
-    
-    # Enable and start Mosquitto
     run_cmd "sudo systemctl enable mosquitto" "Enabling Mosquitto service"
     run_cmd "sudo systemctl restart mosquitto" "Starting Mosquitto service"
-    
-    # Wait for service to start
-    debug "Waiting for Mosquitto to start..."
+
     sleep 3
-    
-    # Verify Mosquitto is running
+
     if sudo systemctl is-active --quiet mosquitto; then
         log "✅ Mosquitto service is running"
     else
         error "❌ Mosquitto service failed to start"
-        debug "Mosquitto service status:"
-        sudo systemctl status mosquitto >> "$DEBUG_LOG" 2>&1
-        debug "Mosquitto journal logs:"
         sudo journalctl -u mosquitto --no-pager -n 20 >> "$DEBUG_LOG" 2>&1
         return 1
     fi
-    
-    # Verify ports are listening
+
+    # Verify ports — use ss (replaces deprecated netstat)
     step "Verifying MQTT ports..."
-    local tcp_port=$(sudo netstat -tlnp | grep ":1883 " | wc -l)
-    local ws_port=$(sudo netstat -tlnp | grep ":9001 " | wc -l)
-    
-    debug "TCP port 1883 listeners: $tcp_port"
-    debug "WebSocket port 9001 listeners: $ws_port"
-    
+    local tcp_port ws_port
+    tcp_port=$(ss -tlnp | grep -c ":1883 " || true)
+    ws_port=$(ss -tlnp  | grep -c ":9001 " || true)
+
+    debug "TCP 1883 listeners: $tcp_port  |  WS 9001 listeners: $ws_port"
+
     if [ "$tcp_port" -gt 0 ] && [ "$ws_port" -gt 0 ]; then
-        log "✅ Both TCP (1883) and WebSocket (9001) ports are listening"
-        sudo netstat -tlnp | grep -E "(1883|9001)" >> "$DEBUG_LOG"
+        log "✅ TCP (1883) and WebSocket (9001) ports are listening"
     else
-        error "❌ MQTT ports not properly configured"
-        sudo netstat -tlnp | grep -E "(1883|9001)" | tee -a "$DEBUG_LOG"
+        error "❌ Expected ports not open — check Mosquitto config"
+        ss -tlnp | grep -E "(1883|9001)" | tee -a "$DEBUG_LOG" || true
         return 1
     fi
 }
 
-# Configure Avahi service discovery
+# -----------------------------------------------------------------------------
+# Avahi mDNS
+# -----------------------------------------------------------------------------
+
 configure_avahi() {
     step "Configuring Avahi mDNS service discovery..."
-    
+
     sudo tee /etc/avahi/services/simpsons-house-mqtt.service >/dev/null <<EOF
 <?xml version="1.0" standalone='no'?>
 <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
 <service-group>
-  <name replace-wildcards="yes">Simpson's House MQTT Control with ULN2003</name>
+  <name replace-wildcards="yes">Simpson's House MQTT Control</name>
   <service>
     <type>_mqtt._tcp</type>
     <port>1883</port>
-    <txt-record>version=3.2</txt-record>
+    <txt-record>version=3.3</txt-record>
     <txt-record>device=simpsons_house</txt-record>
-    <txt-record>motor_driver=ULN2003</txt-record>
     <txt-record>websocket_port=9001</txt-record>
   </service>
 </service-group>
 EOF
     log "✅ Avahi service configuration written"
-    
+
     run_cmd "sudo systemctl restart avahi-daemon" "Restarting Avahi daemon"
-    
-    # Verify Avahi is running
+
     if sudo systemctl is-active --quiet avahi-daemon; then
         log "✅ Avahi daemon is running"
     else
-        warn "❌ Avahi daemon not running properly"
+        warn "Avahi daemon not running — mDNS discovery unavailable"
     fi
 }
 
-# Setup systemd service
+# -----------------------------------------------------------------------------
+# systemd service
+# -----------------------------------------------------------------------------
+
 setup_systemd_service() {
     step "Setting up systemd service for Simpson's House..."
-    
-    debug "Creating systemd service file..."
+
     sudo tee /etc/systemd/system/simpsons-house.service >/dev/null <<EOF
 [Unit]
-Description=Simpson's House MQTT Listener and GPIO Controller with ULN2003 Motor Driver
+Description=Simpson's House MQTT Listener and GPIO Controller
 After=network.target mosquitto.service
 Requires=mosquitto.service
 StartLimitIntervalSec=0
@@ -405,8 +421,6 @@ Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-
-# Environment variables
 Environment=PYTHONPATH=$SCRIPT_DIR
 Environment=MQTT_BROKER=localhost
 Environment=MQTT_PORT=1883
@@ -414,192 +428,117 @@ Environment=MQTT_PORT=1883
 [Install]
 WantedBy=multi-user.target
 EOF
-    log "✅ Systemd service file created"
-    
-    # Reload systemd
-    run_cmd "sudo systemctl daemon-reload" "Reloading systemd daemon"
-    run_cmd "sudo systemctl enable simpsons-house.service" "Enabling Simpson's House service"
-    
-    # Stop any existing instances
-    debug "Stopping any existing instances..."
+    log "✅ systemd service file created"
+
+    run_cmd "sudo systemctl daemon-reload" "Reloading systemd"
+    run_cmd "sudo systemctl enable simpsons-house.service" "Enabling service"
+
     sudo systemctl stop simpsons-house.service 2>/dev/null || true
     pkill -f mqttlistener.py 2>/dev/null || true
     sleep 2
-    
-    # Check if mqttlistener.py exists
+
     if [ ! -f "$SCRIPT_DIR/mqttlistener.py" ]; then
-        error "❌ mqttlistener.py not found in $SCRIPT_DIR"
-        error "Please ensure mqttlistener.py is in the project directory"
+        error "mqttlistener.py not found in $SCRIPT_DIR"
         return 1
     fi
-    log "✅ mqttlistener.py found at $SCRIPT_DIR/mqttlistener.py"
-    
-    # Start the service
-    run_cmd "sudo systemctl start simpsons-house.service" "Starting Simpson's House service"
-    
-    # Wait for service to start
-    debug "Waiting for service to start..."
+    log "✅ mqttlistener.py found"
+
+    run_cmd "sudo systemctl start simpsons-house.service" "Starting service"
     sleep 3
-    
-    # Check service status
+
     if sudo systemctl is-active --quiet simpsons-house.service; then
         log "✅ Simpson's House service is running"
     else
-        error "❌ Simpson's House service failed to start"
-        debug "Service status:"
-        sudo systemctl status simpsons-house.service >> "$DEBUG_LOG" 2>&1
-        debug "Service journal logs:"
-        sudo journalctl -u simpsons-house.service --no-pager -n 20 >> "$DEBUG_LOG" 2>&1
+        error "❌ Service failed to start"
+        sudo journalctl -u simpsons-house.service --no-pager -n 30 | tee -a "$DEBUG_LOG"
         return 1
     fi
 }
 
-# Test MQTT functionality
+# -----------------------------------------------------------------------------
+# MQTT smoke test
+# -----------------------------------------------------------------------------
+
 test_mqtt() {
-    step "Testing MQTT broker functionality..."
-    
-    debug "Testing MQTT publish..."
-    if mosquitto_pub -h localhost -t test/setup -m "Simpson's House ULN2003 setup test $(date)" -q 0; then
+    step "Testing MQTT broker..."
+
+    if mosquitto_pub -h localhost -t test/setup -m "Simpson's House setup test $(date)" -q 0; then
         log "✅ MQTT publish test successful"
     else
         error "❌ MQTT publish test failed"
         return 1
     fi
-    
-    debug "Testing MQTT subscribe (background test)..."
+
     timeout 5 mosquitto_sub -h localhost -t test/setup -C 1 >> "$DEBUG_LOG" 2>&1 &
     sleep 1
-    mosquitto_pub -h localhost -t test/setup -m "Subscribe test message" -q 0
+    mosquitto_pub -h localhost -t test/setup -m "Subscribe test" -q 0
     wait
     log "✅ MQTT subscribe test completed"
 }
 
-# Display comprehensive system information
-display_system_info() {
+# -----------------------------------------------------------------------------
+# Summary
+# -----------------------------------------------------------------------------
+
+display_summary() {
+    local ip_address
+    ip_address=$(hostname -I | awk '{print $1}')
+
     log ""
-    log "=== Simpson's House System Information with ULN2003 ==="
-    
-    # Get IP address
-    local ip_address=$(hostname -I | awk '{print $1}')
-    log "🏠 Raspberry Pi IP Address: $ip_address"
-    log "🖥️  Hostname: $(hostname)"
-    
-    # Show listening ports
-    log "📡 Listening ports:"
-    sudo netstat -tlnp | grep -E "(1883|9001)" | while read line; do
-        log "   $line"
-    done
-    
-    # Show GPIO configuration for ULN2003 setup
-    log "🔧 ULN2003 GPIO Pin Configuration (BCM numbering):"
-    log "   💡 Light (GPIO 17) - Pin 11 - LED + 220Ω resistor"
-    log "   🌀 ULN2003 Stepper Driver:"
-    log "      - IN1 (GPIO 27) - Pin 13"
-    log "      - IN2 (GPIO 18) - Pin 12"
-    log "      - IN3 (GPIO 22) - Pin 15"
-    log "      - IN4 (GPIO 24) - Pin 18"
-    log "   🚪 Door Servo (GPIO 23) - Pin 16 - Servo motor"
-    
-    # Show ULN2003 wiring information
+    log "=== Simpson's House Setup Complete ==="
     log ""
-    log "🔌 ULN2003 Wiring Requirements:"
-    log "   ⚡ Power: ULN2003 VCC → Pi 5V (Pin 4)"
-    log "   🔗 Ground: ULN2003 GND → Pi GND"
-    log "   🎛️  Control: Pi GPIO pins → ULN2003 IN1-IN4"
-    log "   🔧 Motor: Stepper motor connector → ULN2003 board"
-    
-    # Show service status
+    log "🏠 Pi IP Address : $ip_address"
+    log "🖥️  Hostname      : $(hostname)"
     log ""
-    log "⚙️  System Services:"
-    if sudo systemctl is-active --quiet mosquitto; then
-        log "   ✅ Mosquitto MQTT Broker - Running"
-    else
-        log "   ❌ Mosquitto MQTT Broker - Stopped"
-    fi
-    
-    if sudo systemctl is-active --quiet simpsons-house; then
-        log "   ✅ Simpson's House ULN2003 Controller - Running"
-    else
-        log "   ❌ Simpson's House ULN2003 Controller - Stopped"
-    fi
-    
-    if sudo systemctl is-active --quiet avahi-daemon; then
-        log "   ✅ Avahi mDNS Service - Running"
-    else
-        log "   ❌ Avahi mDNS Service - Stopped"
-    fi
-    
-    # Show process information
-    log "🔄 Process Information:"
-    local mosquitto_pid=$(pgrep mosquitto || echo "Not running")
-    local python_pid=$(pgrep -f mqttlistener.py || echo "Not running")
-    log "   Mosquitto PID: $mosquitto_pid"
-    log "   MQTT Listener PID: $python_pid"
-    
+    log "⚙️  Services:"
+    sudo systemctl is-active --quiet mosquitto      && log "   ✅ Mosquitto MQTT Broker"        || log "   ❌ Mosquitto MQTT Broker"
+    sudo systemctl is-active --quiet simpsons-house && log "   ✅ Simpson's House Controller"   || log "   ❌ Simpson's House Controller"
+    sudo systemctl is-active --quiet avahi-daemon   && log "   ✅ Avahi mDNS"                   || log "   ❌ Avahi mDNS"
     log ""
-    log "=== iOS App Configuration ==="
-    log "📱 Use these settings in your Swift Playgrounds app:"
-    log "   🌐 Host: $ip_address"
-    log "   🔌 WebSocket Port: 9001"
-    log "   📨 MQTT Topics: home/light, home/garage, home/door"
+    log "📡 MQTT Ports (ss -tlnp):"
+    ss -tlnp | grep -E "(1883|9001)" | while read -r line; do log "   $line"; done
     log ""
-    log "🎮 Device Controls with ULN2003:"
-    log "   💡 Light: Send 'ON' or 'OFF' to home/light"
-    log "   🚗 Garage Door: Send 'OPEN' or 'CLOSE' to home/garage"
-    log "   🚪 Door: Send 'ON' (open) or 'OFF' (close) to home/door"
+    log "🔧 GPIO Pin Configuration (BCM):"
+    log "   💡 Light        GPIO 17  (Pin 11) — LED + 220Ω"
+    log "   🚗 Garage IN1   GPIO 27  (Pin 13)"
+    log "   🚗 Garage IN2   GPIO 18  (Pin 12)"
+    log "   🚗 Garage IN3   GPIO 22  (Pin 15)"
+    log "   🚗 Garage IN4   GPIO 24  (Pin 18)"
+    log "   🚪 Door Servo   GPIO 23  (Pin 16)"
     log ""
-    log "🔧 Hardware Testing:"
-    log "   🧪 Test ULN2003: python3 ULN2003_test.py"
-    log "   🧪 Test All GPIO: python3 gpio_test.py"
+    log "📱 iOS App Settings:"
+    log "   Host: $ip_address"
+    log "   WebSocket Port: 9001"
+    log "   Topics: home/light  home/garage  home/door"
     log ""
-    log "🔧 System Management Commands:"
-    log "   📊 Status: sudo systemctl status simpsons-house"
-    log "   📋 Logs:   sudo journalctl -u simpsons-house -f"
-    log "   🔄 Restart: sudo systemctl restart simpsons-house"
-    log "   🛠️  MQTT Test: mosquitto_pub -h localhost -t home/garage -m OPEN"
+    log "🔧 Useful Commands:"
+    log "   sudo systemctl status simpsons-house"
+    log "   sudo journalctl -u simpsons-house -f"
+    log "   mosquitto_pub -h localhost -t home/light -m ON"
+    log "   mosquitto_pub -h localhost -t home/garage -m OPEN"
     log ""
-    log "📁 Log Files:"
-    log "   🏠 Setup: $LOG_FILE"
-    log "   🔍 Debug: $DEBUG_LOG"
-    log "   📡 MQTT Listener: sudo journalctl -u simpsons-house -f"
-    log "   🦟 Mosquitto: /var/log/mosquitto/mosquitto.log"
-    log ""
-    log "⚠️  ULN2003 Safety Notes:"
-    log "   🔋 Always use external power supply for motor (9V battery)"
-    log "   🔗 Ensure all grounds are connected together"
-    log "   🌡️  ULN2003 IC may get warm during operation"
-    log "   🔧 Test motor direction before final assembly"
-    log ""
-    log "🔒 Corporate Networks:"
-    log "   If you encounter SSL certificate errors, run: ./install_ca.sh"
+    log "📁 Logs:"
+    log "   Setup : $LOG_FILE"
+    log "   Debug : $DEBUG_LOG"
+    log "   MQTT  : sudo journalctl -u simpsons-house -f"
     log ""
 }
 
-# Main setup function
+# -----------------------------------------------------------------------------
+# Main
+# -----------------------------------------------------------------------------
+
 main() {
-    # Initialize logging
-    echo "Simpson's House Setup with ULN2003 - $(date)" > "$LOG_FILE"
-    echo "Simpson's House Debug Log with ULN2003 - $(date)" > "$DEBUG_LOG"
-    
-    log "🏠 Starting Simpson's House Complete Setup v3.2 with ULN2003 Motor Driver..."
-    log "This will configure MQTT + WebSocket + GPIO control + ULN2003 for iOS app"
-    log "Setup log: $LOG_FILE"
-    log "Debug log: $DEBUG_LOG"
+    # Initialise log files (owned by current user, not root)
+    echo "Simpson's House Setup v3.3 - $(date)" > "$LOG_FILE"
+    echo "Simpson's House Debug Log - $(date)" > "$DEBUG_LOG"
+
+    log "🏠 Starting Simpson's House Setup v3.3..."
+    log "📋 Run './install_ca.sh' first if on a corporate network (FortiGate SSL inspection)"
     log ""
-    log "🔧 NEW: Now includes ULN2003 motor driver for professional stepper motor control!"
-    log "📋 Note: If you're in a corporate environment with SSL inspection,"
-    log "   run './install_ca.sh' first before proceeding with this setup."
-    log ""
-    log "⚠️  Hardware Requirements:"
-    log "   • ULN2003 Motor Driver IC (16-pin DIP)"
-    log "   • stepper motor (3-6V, ≤600mA)"
-    log "   • External 9V battery for motor power"
-    log "   • Updated GPIO wiring per README.md"
-    log ""
-    
-    # Run setup steps
+
     check_root
-    sync_corporate_time
+    sync_system_time
     check_system
     install_packages
     setup_python_env
@@ -607,26 +546,11 @@ main() {
     configure_avahi
     setup_systemd_service
     test_mqtt
-    display_system_info
-    
-    log "🎉 Simpson's House with ULN2003 setup completed successfully!"
-    log "🌀 Your stepper motor is now ready for professional control!"
-    log "Connect your iPhone/iPad and start controlling the house! 🏠✨"
-    log ""
-    log "📋 Next Steps:"
-    log "   1. Test your ULN2003 wiring: python3 ULN2003_test.py"
-    log "   2. Test all GPIO pins: python3 gpio_test.py"
-    log "   3. Connect your iOS app and enjoy motor control!"
-    log ""
-    log "📋 If you encounter any issues:"
-    log "   1. Check the debug log: $DEBUG_LOG"
-    log "   2. Check service logs: sudo journalctl -u simpsons-house -f"
-    log "   3. Verify ULN2003 hardware connections match the GPIO configuration"
-    log "   4. Ensure 9V battery is connected and charged"
+    display_summary
+
+    log "🎉 Setup complete! Connect your iPad and start controlling the house."
 }
 
-# Error handling
-trap 'error "Setup failed at line $LINENO. Check debug log: $DEBUG_LOG"' ERR
+trap 'error "Setup failed at line $LINENO — check $DEBUG_LOG"' ERR
 
-# Run main function
 main "$@"
