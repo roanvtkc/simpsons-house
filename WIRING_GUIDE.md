@@ -130,107 +130,69 @@ python3 gpio_test.py
 
 ---
 
-## Device 2 — Garage Door (Stepper Motor + ULN2003 Driver Board)
+## Device 2 — Garage Door (Servo Motor)
 
-### Understanding the two-board system
-
-You have TWO boards for this device:
-
-```
-  ┌─────────────────┐         ┌──────────────────────┐
-  │  Raspberry Pi   │ 4 wires │   ULN2003 Driver     │
-  │  GPIO 27,18,    │────────>│   Board              │  5V power
-  │       22,24     │         │   (the blue board)   │<──────────
-  └─────────────────┘         └──────┬───────────────┘
-                                     │ 5-pin connector
-                               ┌─────┴──────────────┐
-                               │  28BYJ-48 Stepper   │
-                               │  Motor              │
-                               │  (the small motor   │
-                               │   with a white plug) │
-                               └─────────────────────┘
-```
-
-The Pi can only supply ~16mA per pin — not enough to spin a motor. The ULN2003 board contains transistors that take the Pi's weak signal and use 5V power to drive the motor coils.
-
-### Identifying the ULN2003 board
-
-The ULN2003 board has labelled connectors. Look for:
+The garage door uses the same kind of SG90 hobby servo as the front door, just on
+a different GPIO pin. No driver board is needed — three wires straight to the Pi.
 
 ```
-  ┌─────────────────────────────────────┐
-  │  ULN2003 DRIVER BOARD               │
-  │                                     │
-  │  ○ IN1    ← wire from GPIO 27       │
-  │  ○ IN2    ← wire from GPIO 18       │
-  │  ○ IN3    ← wire from GPIO 22       │
-  │  ○ IN4    ← wire from GPIO 24       │
-  │  ○ IN5    ← NOT USED (leave empty)  │
-  │                                     │
-  │  ┌──────┐  ← 5-pin motor connector  │
-  │  │ motor│     (motor plugs in here) │
-  │  └──────┘                           │
-  │                                     │
-  │  ○ VCC (or +)  ← 5V power           │
-  │  ○ GND (or −)  ← Ground             │
-  │                                     │
-  └─────────────────────────────────────┘
+  ┌─────────────────┐  3 wires  ┌──────────────────┐
+  │  Raspberry Pi   │──────────>│   SG90 Servo     │
+  │  GPIO 27        │  signal   │   (garage door)  │
+  │  5V, GND        │  power    │                  │
+  └─────────────────┘           └──────────────────┘
 ```
 
-The labels `IN1` through `IN4` are usually printed in white text on the blue board. The 5-pin motor connector is on the opposite end.
+A servo has a motor, gearbox and position sensor built in. You tell it *where* to
+go as an angle, and it holds that position by itself — unlike a stepper, which has
+to be driven coil by coil.
 
-### Identifying the stepper motor connector
+### Identifying the servo wires
 
-The 28BYJ-48 motor has a white 5-pin plug on a short cable:
+Most SG90 hobby servos have three wires. The colours can vary between brands:
 
 ```
-  Motor cable:   ┌─────────────────────┐
-                 │  ○  ○  ○  ○  ○      │  ← 5-pin keyed plug
-                 └─────────────────────┘
-                   ↑
-                   Notch/tab on one side — it only fits ONE way into the ULN2003 board
-```
+  Common wire colours for SG90 servos:
+  ┌──────────┬──────────┬──────────┐
+  │  Signal  │  Power   │  Ground  │
+  │  (data)  │  (VCC)   │  (GND)   │
+  ├──────────┼──────────┼──────────┤
+  │  Orange  │  Red     │  Brown   │  ← most common
+  │  Yellow  │  Red     │  Black   │  ← some brands
+  │  White   │  Red     │  Black   │  ← some brands
+  └──────────┴──────────┴──────────┘
 
-Just push the plug firmly into the 5-pin socket on the ULN2003 board. It is keyed — it physically cannot go in upside down.
+  When in doubt: RED is always power (VCC, 5V)
+```
 
 ### Wire connections (step by step)
 
-**First: plug the motor into the board**
-- Push the 28BYJ-48 white plug into the 5-pin connector on the ULN2003 board
-- You should hear/feel a small click when it seats properly
+| Step | Servo wire | Colour | From | To |
+|------|-----------|--------|------|----|
+| 1 | Signal | Orange or Yellow or White | Servo signal wire | Pi GPIO 27 (physical pin 13) |
+| 2 | Power | Red | Servo red wire | Pi 5V (physical pin 2) |
+| 3 | Ground | Brown or Black | Servo brown/black wire | Pi GND (physical pin 14) |
 
-**Then connect the Pi to the ULN2003 board:**
+> **Why 5V and not 3.3V?** The SG90 needs 5V to develop full torque. The signal
+> wire is happy with the Pi's 3.3V logic — only the power wire must be 5V.
 
-| Step | From | To | Wire colour suggestion |
-|------|------|----|------------------------|
-| 1 | Pi GPIO 27 (physical pin 13) | ULN2003 IN1 | Blue |
-| 2 | Pi GPIO 18 (physical pin 12) | ULN2003 IN2 | Green |
-| 3 | Pi GPIO 22 (physical pin 15) | ULN2003 IN3 | Yellow |
-| 4 | Pi GPIO 24 (physical pin 18) | ULN2003 IN4 | Orange |
-| 5 | Pi 5V (physical pin 2) | ULN2003 VCC (or +) | Red |
-| 6 | Pi GND (physical pin 14) | ULN2003 GND (or −) | Black |
+> **Note the pins are different from the front door.** Garage door is GPIO 27
+> (pin 13); front door is GPIO 23 (pin 16). Swapping them makes the wrong door move.
 
-> **Why do we use Pi 5V (not 3.3V) for the ULN2003?**
-> The stepper motor coils need 5V to reach full torque. The IN1–IN4 control
-> signals from the Pi are 3.3V but the ULN2003 accepts them — only the motor
-> power line needs to be 5V.
-
-### The order of IN1–IN4 matters
-
-If the wires are in the wrong order, the stepper sequence breaks and the motor will vibrate or stall rather than rotate. Double-check each wire against the table above.
-
-### Circuit in plain English
+### How the Pi controls the angle
 
 ```
-Pi GPIO 27 → ULN2003 IN1 ─┐
-Pi GPIO 18 → ULN2003 IN2  │
-Pi GPIO 22 → ULN2003 IN3  ├─ transistors amplify signals using 5V power
-Pi GPIO 24 → ULN2003 IN4 ─┘
-Pi 5V      → ULN2003 VCC
-Pi GND     → ULN2003 GND → also provides return path for motor current
+Pi GPIO 27 ──> 50 Hz pulse train, pulse width 1ms–2ms
                         ↓
-               28BYJ-48 motor coils energised in sequence → shaft rotates
+        servo's internal circuit compares pulse width to
+        its position sensor and drives the motor until they match
+                        ↓
+              horn holds at the requested angle
 ```
+
+In code this is a PWM duty cycle: 0° → 2%, 180° → 12%. The firmware uses
+**0° = closed, 90° = open**, then sets the duty cycle to 0 so the servo stops
+pulsing and doesn't hum while idle.
 
 ### Test it
 
@@ -238,18 +200,20 @@ Pi GND     → ULN2003 GND → also provides return path for motor current
 python3 gpio_test.py
 ```
 
-**Watch for:** the motor shaft (or the white plastic gear visible through the hole) turns one direction for ~2 seconds, pauses, then turns the other direction for ~2 seconds.
+**Watch for:** the servo horn swings roughly a quarter turn, pauses, then swings
+back. If it buzzes without moving, check the red wire is on 5V.
 
-### Stepper motor troubleshooting
+### Servo troubleshooting
 
 | Symptom | Most likely cause | Fix |
 |---------|-------------------|-----|
-| Motor hums/vibrates but doesn't spin | IN1–IN4 wired in wrong order | Re-check each wire against the table |
-| Motor doesn't move at all | 5V not connected to ULN2003 VCC | Check the red 5V wire |
-| Motor doesn't move at all | Common GND missing | Check the black GND wire |
-| Motor gets hot and stops | Steps too fast, motor stalling | Increase the delay in `stepper_step()` |
-| Motor spins but in wrong direction | Sequence reversed in firmware | Swap "forward" and "reverse" in `rotate_stepper()` |
-| Motor plug feels loose | Not fully seated | Push the white plug firmly until it clicks |
+| Servo doesn't move at all | Signal wire on the wrong pin | Garage is GPIO 27 (pin 13), not GPIO 23 |
+| Servo buzzes but barely moves | Powered from 3.3V instead of 5V | Move the red wire to a 5V pin |
+| Servo doesn't move at all | Common GND missing | Check the brown/black wire to Pi GND |
+| Servo hums continuously when idle | Still being sent pulses | The code should call `ChangeDutyCycle(0)` after each move |
+| Servo moves the wrong way | Angles mapped the other way round | Swap the values in `control_garage_door()` |
+| Servo won't reach full travel | SG90 unit variation, or door binding | Adjust the 2%–12% range in `set_servo_angle()`; check the door moves freely |
+| Pi reboots when the servo moves | Both servos drawing peak current at once | Add an external 5V supply, GND common with the Pi |
 
 ---
 
@@ -351,16 +315,12 @@ Go through this checklist out loud with a partner. One person reads, one person 
 - [ ] LED short leg (−) → GND rail
 - [ ] Black wire: GND rail → Pi GND (pin 9)
 
-**Stepper Motor:**
-- [ ] Motor white plug seated in ULN2003 5-pin connector (clicked in)
-- [ ] Blue wire: Pi GPIO 27 (pin 13) → ULN2003 IN1
-- [ ] Green wire: Pi GPIO 18 (pin 12) → ULN2003 IN2
-- [ ] Yellow wire: Pi GPIO 22 (pin 15) → ULN2003 IN3
-- [ ] Orange wire: Pi GPIO 24 (pin 18) → ULN2003 IN4
-- [ ] Red wire: Pi 5V (pin 2) → ULN2003 VCC
-- [ ] Black wire: Pi GND (pin 14) → ULN2003 GND
+**Garage Door Servo:**
+- [ ] Signal wire (orange/yellow/white): Servo → Pi GPIO 27 (pin 13)
+- [ ] Power wire (red): Servo → Pi 5V (pin 2)
+- [ ] Ground wire (brown/black): Servo → Pi GND (pin 14)
 
-**Servo:**
+**Front Door Servo:**
 - [ ] Signal wire (orange/yellow/white): Servo → Pi GPIO 23 (pin 16)
 - [ ] Power wire (red): Servo → Pi 5V (pin 4)
 - [ ] Ground wire (brown/black): Servo → Pi GND (pin 6)
@@ -378,13 +338,13 @@ Expected output:
    → Watch the LED: it should blink ON–OFF 3 times
 ✅ Light test passed
 
-🌀 TEST 2/3 — Garage Door Stepper Motor
-   → Watch the motor shaft: it should turn one way, then reverse
-✅ Stepper test passed
-
-🚪 TEST 3/3 — Front Door Servo
+🚗 TEST 2/3 — Garage Door Servo (GPIO 27)
    → Watch the servo arm: it should move to 90° then return to 0°
-✅ Servo test passed
+✅ Garage door servo test PASSED
+
+🚪 TEST 3/3 — Front Door Servo (GPIO 23)
+   → Watch the servo arm: it should move to 90° then return to 0°
+✅ Front door servo test PASSED
 
 🏁 All tests passed — ready to run the full Simpson's House system!
 ```
@@ -401,17 +361,14 @@ The physical board has 40 pins. These are the ones we use:
   Physical   GPIO    Used for
   Pin        (BCM)
   ─────────────────────────────
-  Pin  2     5V      ULN2003 VCC + (not a GPIO, just power)
-  Pin  4     5V      Servo power  + (not a GPIO, just power)
-  Pin  6     GND     Servo GND    − (not a GPIO, just ground)
+  Pin  2     5V      Garage servo power  + (not a GPIO, just power)
+  Pin  4     5V      Front door servo power + (not a GPIO, just power)
+  Pin  6     GND     Front door servo GND  − (not a GPIO, just ground)
   Pin  9     GND     LED GND      − (not a GPIO, just ground)
   Pin 11     GPIO 17 LED (light)
-  Pin 12     GPIO 18 Stepper IN2
-  Pin 13     GPIO 27 Stepper IN1
-  Pin 14     GND     ULN2003 GND  − (not a GPIO, just ground)
-  Pin 15     GPIO 22 Stepper IN3
-  Pin 16     GPIO 23 Servo signal
-  Pin 18     GPIO 24 Stepper IN4
+  Pin 13     GPIO 27 Garage door servo signal
+  Pin 14     GND     Garage servo GND    − (not a GPIO, just ground)
+  Pin 16     GPIO 23 Front door servo signal
 ```
 
 Run `pinout` on the Pi to see a colour-coded version of this on your screen.

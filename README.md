@@ -1,6 +1,6 @@
 # 🏠 Simpson's House Smart Home Control
 
-A comprehensive smart home automation project that allows you to control LEDs, a garage door opener driven by a stepper motor via ULN2003 driver, and servos on a Raspberry Pi directly from an iOS Swift Playgrounds app using **MQTT over WebSocket**.
+A comprehensive smart home automation project that allows you to control LEDs and servo-driven garage and front doors on a Raspberry Pi directly from an iOS Swift Playgrounds app using **MQTT over WebSocket**.
 
 [![Status](https://img.shields.io/badge/Status-Smart%20Home%20Ready-brightgreen)](https://github.com/roanvtkc/simpsons-house)
 [![MQTT](https://img.shields.io/badge/MQTT-WebSocket%20Enabled-blue)](https://mqtt.org/)
@@ -19,8 +19,8 @@ A comprehensive smart home automation project that allows you to control LEDs, a
 - **🏠 Smart Home Control**: Complete home automation system inspired by The Simpsons
 - **📱 iOS App**: Beautiful SwiftUI interface built for Swift Playgrounds
 - **🌐 MQTT over WebSocket**: Modern, reliable communication protocol
-- **🔧 GPIO Control**: Direct hardware control of LEDs, a garage door stepper motor, and servo motors
-- **⚙️ ULN2003 Motor Driver**: Professional motor control with direction and speed
+- **🔧 GPIO Control**: Direct hardware control of LEDs and servo motors
+- **⚙️ Servo Control**: PWM angle control on both the garage door and the front door
 - **📡 Real-time Communication**: Instant response and status feedback
 - **🔄 Auto-reconnection**: Robust connection handling with keep-alive pings
 - **🕵️ mDNS Discovery**: Automatic network device discovery
@@ -35,7 +35,7 @@ graph TD
     C -->|GPIO| D[Raspberry Pi Hardware]
     
     D --> E[💡 Living Room Light<br/>GPIO 17]
-    D --> F[🚗 Garage Door Opener via ULN2003<br/>GPIO 27, 18, 22, 24]
+    D --> F[🚗 Garage Door Servo<br/>GPIO 27]
     D --> G[🚪 Front Door Servo<br/>GPIO 23]
 ```
 
@@ -46,8 +46,7 @@ graph TD
   > 📱 **iPad SSH client**: We recommend [**Secure ShellFish**](https://secureshellfish.app) — no account required, saves sessions, and has a proper iOS keyboard toolbar. Free tier is sufficient for this project.
 - **Git installed** on the Pi (will be installed automatically if missing)
 - **iOS device** with Swift Playgrounds 4+ or macOS with Xcode 13+
-- **Hardware components**: LEDs, resistors, ULN2003 driver with 28BYJ-48 stepper motor for the garage door opener, servo motor, breadboard
-- **External power supply**: 9V battery or adjustable power supply for motor
+- **Hardware components**: LEDs, resistors, two SG90 servo motors (garage door and front door), breadboard
 - **Same network**: Both devices must be on the same local network
 
 ## 🚀 Quick Start
@@ -108,17 +107,13 @@ Pi GPIO 17 (pin 11) ─── 220Ω resistor ─── LED (+) long leg
 ```
 Key fact: the **longer LED leg is +**; it goes toward GPIO 17. The shorter leg goes to GND.
 
-**🚗 Garage Door — Stepper Motor via ULN2003 Driver Board**
+**🚗 Garage Door — Servo Motor (GPIO 27 → physical pin 13)**
 ```
-Pi GPIO 27 (pin 13) ─── ULN2003 IN1
-Pi GPIO 18 (pin 12) ─── ULN2003 IN2
-Pi GPIO 22 (pin 15) ─── ULN2003 IN3
-Pi GPIO 24 (pin 18) ─── ULN2003 IN4
-Pi 5V      (pin  2) ─── ULN2003 VCC
-Pi GND     (pin 14) ─── ULN2003 GND
-28BYJ-48 motor white plug ─── ULN2003 5-pin motor connector (keyed, one way only)
+Pi GPIO 27 (pin 13) ─── Servo SIGNAL wire (orange / yellow / white)
+Pi 5V      (pin  2) ─── Servo POWER wire  (red)
+Pi GND     (pin 14) ─── Servo GROUND wire (brown / black)
 ```
-Key fact: the **order of IN1–IN4 matters** — wrong order = motor hums but doesn't spin.
+Key fact: **red is always power**; if your servo has different colours, red is still VCC.
 
 **🚪 Front Door — Servo Motor (GPIO 23 → physical pin 16)**
 ```
@@ -134,23 +129,19 @@ Key fact: **red is always power**; if your servo has different colours, red is s
 |-----------|----------|-------|
 | LED (any color) | 1 | For light indication |
 | 220Ω Resistor | 1 | For LED current limiting |
-| ULN2003 Stepper Driver Board | 1 | Drives garage door stepper |
-| Stepper Motor (28BYJ-48) | 1 | 5V geared stepper for garage door |
-| Servo Motor (SG90) | 1 | Standard 3-wire servo |
+| Servo Motor (SG90) | 2 | One for the garage door, one for the front door |
 | Breadboard | 1 | For prototyping |
 | Jumper Wires | 15+ | Male-to-female recommended |
-| 9V Battery + Cable | 1 | External power for motor |
 | Breadboard Power Module | 1 | Optional, for cleaner power distribution |
 
 #### ⚠️ Safety Notes
 
-- **Use External Power for Motors when needed**: The stepper motor is low power but large motors may require external supply
+- **Two SG90 servos run fine on Pi 5V**: they draw little enough current that no external supply or driver board is needed
 - **Never use Pi power for high-current motors**
 - **Double-check connections** before powering on
 - **Use appropriate resistors** to prevent LED burnout
-- **Driver Heat**: ULN2003 may get warm during operation
-- **Motor Direction**: Test motor direction before final assembly
-- **Common Ground**: Pi GND and external power GND must be connected
+- **Servo direction**: check which way each servo swings before gluing it into the model
+- **Common Ground**: if you do add external power, its GND must be connected to Pi GND
 
 #### 🔍 Pin Verification
 
@@ -206,7 +197,7 @@ The setup script will:
 
 ### Device Controls
 - **💡 Living Room Light**: Toggle the main lighting
-- **🚗 Garage Door**: Open and close using the stepper motor
+- **🚗 Garage Door**: Open and close using the garage servo
   - `OPEN`: Turn motor to open the door
   - `CLOSE`: Turn motor to close the door
   - Future: Variable speed control via PWM
@@ -224,7 +215,7 @@ The setup script will:
 | Topic | Description | Commands |
 |-------|-------------|----------|
 | `home/light` | Living room light control | `ON`, `OFF` |
-| `home/garage` | garage door opener via ULN2003 | `OPEN`, `CLOSE` |
+| `home/garage` | garage door servo (GPIO 27) | `OPEN`, `CLOSE` |
 | `home/door` | Front door servo | `ON` (open), `OFF` (close) |
 
 ### Network Ports
@@ -257,9 +248,9 @@ mosquitto_sub -h localhost -t home/# -v
 Edit `mqttlistener.py` to change pin assignments:
 ```python
 # GPIO pin assignments (BCM numbering)
-LIGHT_PIN = 17     # Light control
-STEPPER_PINS = [27, 18, 22, 24]  # Stepper IN1‑IN4
-SERVO_PIN = 23     # Servo control
+LIGHT_PIN        = 17   # Light control
+GARAGE_SERVO_PIN = 27   # Garage door servo signal
+SERVO_PIN        = 23   # Front door servo signal
 ```
 
 ### Network Settings
@@ -272,47 +263,41 @@ Update the iOS app host address:
 
 ### Test GPIO Pins Before MQTT Setup
 
-**Create a simple GPIO test script:**
+**Run the built-in hardware test:**
 ```bash
 cd ~/simpsons-house
-nano stepper_test.py
+python3 gpio_test.py
 ```
 
-**Copy this stepper motor test script:**
+It walks the light and both servos in turn. If you want to try a single servo by
+hand, this is the minimum:
 ```python
 #!/usr/bin/env python3
 import RPi.GPIO as GPIO
 import time
 
-STEPPER_PINS = [27, 18, 22, 24]
-SEQUENCE = [[1,0,0,1],[1,0,0,0],[1,1,0,0],[0,1,0,0],[0,1,1,0],[0,0,1,0],[0,0,1,1],[0,0,0,1]]
+GARAGE_SERVO_PIN = 27          # use 23 for the front door servo
 
 GPIO.setmode(GPIO.BCM)
-for pin in STEPPER_PINS:
-    GPIO.setup(pin, GPIO.OUT)
-    GPIO.output(pin, 0)
+GPIO.setup(GARAGE_SERVO_PIN, GPIO.OUT)
+pwm = GPIO.PWM(GARAGE_SERVO_PIN, 50)   # 50 Hz is the hobby-servo standard
+pwm.start(0)
 
 try:
-    for _ in range(512):
-        for pattern in SEQUENCE:
-            for pin, val in zip(STEPPER_PINS, pattern):
-                GPIO.output(pin, val)
-            time.sleep(0.002)
+    for angle in (0, 90, 0):
+        pwm.ChangeDutyCycle((angle / 180.0) * 10 + 2)   # 0° → 2%, 180° → 12%
+        time.sleep(0.8)                                  # let the servo travel
+        pwm.ChangeDutyCycle(0)                           # stop pulsing, avoid jitter
+        time.sleep(0.5)
 finally:
-    for pin in STEPPER_PINS:
-        GPIO.output(pin, 0)
+    pwm.stop()
     GPIO.cleanup()
-```
-
-**Run the garage door stepper test:**
-```bash
-python3 stepper_test.py
 ```
 
 ### Expected Results:
 - **💡 Light LED**: Should turn ON for 2 seconds, then OFF
-- **🚗 Garage door stepper motor**: Should run forward for 3 seconds, then reverse for 3 seconds, then stop
-- **🚪 Servo**: Should move from 0° to 90° and back to 0°
+- **🚗 Garage door servo**: Should swing from 0° (closed) to 90° (open) and back
+- **🚪 Front door servo**: Should move from 0° to 90° and back to 0°
 
 ### Verify Services
 ```bash
@@ -342,28 +327,25 @@ mosquitto_pub -h localhost -t home/door -m ON   # Servo open
 ## 🐛 Troubleshooting
 
 <details>
-<summary><strong>ULN2003 Motor Issues</strong></summary>
+<summary><strong>Servo Motor Issues</strong></summary>
 
-**Motor not running:**
-- Check external power supply (9V battery connected?)
-- Verify ULN2003 IC is properly seated in breadboard
-- Ensure all GND connections are made (Pi GND to external power GND)
-- Test with multimeter: Enable pin should show 3.3V when motor command is ON
+**Servo doesn't move:**
+- Check the signal wire is on the right pin — GPIO 27 (pin 13) for the garage, GPIO 23 (pin 16) for the front door
+- Red wire must be on Pi 5V, not 3.3V — a servo on 3.3V often twitches but won't hold
+- Ensure the servo GND is connected to Pi GND
+- Confirm nothing else is holding the pin: `sudo fuser /dev/gpiomem`
 
-**Motor runs but wrong direction:**
-- Swap Input1 and Input2 connections (GPIO 27 and GPIO 18)
-- Or swap motor wires at ULN2003 outputs
+**Servo jitters or hums when idle:**
+- Expected if pulses keep being sent. The code calls `ChangeDutyCycle(0)` after each move to stop this — check it isn't commented out
+- Both servos on Pi 5V can brown out the Pi if they move at the same instant under load; add an external 5V supply (GND common with the Pi) if so
 
-**Motor runs slowly:**
-- Check external power supply voltage (should be 6-12V)
-- Verify PWM duty cycle in code (should be 75-100% for full speed)
-- ULN2003 may be overheating - check for adequate cooling
+**Servo moves the wrong way:**
+- Swap the angles in `control_garage_door()` / `control_door()` — the code maps OPEN = 90°, CLOSED = 0°
+- Or remount the horn 90° round on the spline
 
-**ULN2003 gets hot:**
-- Normal operation - IC can get warm
-- Ensure adequate ventilation
-- Consider heat sink for continuous operation
-- Check motor current draw (should be <600mA per channel)
+**Servo doesn't reach full travel:**
+- SG90s vary; adjust the 2%–12% duty range in `set_servo_angle()` to suit your unit
+- Check the door isn't binding on the model before blaming the servo
 </details>
 
 <details>
@@ -378,23 +360,17 @@ pinout
 sudo fuser /dev/gpiomem
 ```
 
-**Manual ULN2003 testing:**
-```bash
-# Test motor control pins
-echo 27 > /sys/class/gpio/export
-echo out > /sys/class/gpio/gpio27/direction
-echo 1 > /sys/class/gpio/gpio27/value    # Set direction
-echo 22 > /sys/class/gpio/export
-echo out > /sys/class/gpio/gpio22/direction
-echo 1 > /sys/class/gpio/gpio22/value    # Enable motor
-# Motor should run - test with multimeter if needed
-```
+**Manual servo testing:**
 
-**Common ULN2003 wiring issues:**
-- Pin numbering: Ensure correct ULN2003 pin identification
-- Power separation: 5V logic power vs. motor power (VMotor)
-- Ground loops: All grounds must be connected together
-- Enable pins: Must be HIGH for motor to run
+A servo needs a continuous 50 Hz pulse train, so it cannot be driven from the
+shell the way an LED can — use the Python snippet in
+[Testing & Verification](#-testing--verification) above, or `gpio_test.py`.
+
+**Common servo wiring issues:**
+- Signal on the wrong pin: garage is GPIO 27 (pin 13), front door is GPIO 23 (pin 16)
+- Power on 3.3V instead of 5V — always use a 5V pin for the red wire
+- Missing common ground between servo and Pi
+- Connector reversed: check the wire colours, not the plug orientation — red is always power
 </details>
 
 ### Log Locations
@@ -419,9 +395,10 @@ echo 1 > /sys/class/gpio/gpio22/value    # Enable motor
 simpsons-house/
 ├── 📄 README.md                    # This file
 ├── 🔧 setup.sh                     # Automated setup script
-├── 🐍 mqttlistener.py               # Python MQTT listener with ULN2003 control
+├── 🐍 mqttlistener.py               # Python MQTT listener with servo control
 ├── 🔐 install_ca.sh                # FortiGate certificate installer
-├── 🧪 stepper_test.py                # Garage door stepper motor test script
+├── 🧪 gpio_test.py                  # Hardware test: light + both servos
+├── 🧪 stepper_test.py                # DEPRECATED — old stepper test, kept for reference
 ├── 📱 ios-app/                     # Swift Playgrounds app code
 │   └── ContentView.swift
 ├── 📋 systemd/                     # Systemd service files
@@ -459,6 +436,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] **Web dashboard** for browser control
 
 ### Version History
+- **v3.3** - Garage door moved from a 28BYJ-48 stepper + ULN2003 to an SG90 servo on GPIO 27
 - **v3.1** - ULN2003 motor driver integration, improved motor control
 - **v3.0** - MQTT over WebSocket support, systemd integration
 - **v2.0** - Basic MQTT control with GPIO

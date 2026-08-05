@@ -247,11 +247,11 @@ All the backend code lives in `mqttlistener.py`. It is divided into numbered sec
 All the settings — which GPIO pins are used, the MQTT broker address, the topic names — are defined at the top as constants. This means students only need to change one place if the hardware is rewired.
 
 ```python
-LIGHT_PIN       = 17
-STEPPER_PINS    = [27, 18, 22, 24]
-SERVO_PIN       = 23
-BROKER_HOST     = "localhost"
-BROKER_PORT     = 1883
+LIGHT_PIN        = 17
+GARAGE_SERVO_PIN = 27
+SERVO_PIN        = 23
+BROKER_HOST      = "localhost"
+BROKER_PORT      = 1883
 ```
 
 ---
@@ -274,29 +274,40 @@ Runs once at startup. Tells the Raspberry Pi:
 - Which numbering scheme to use (BCM — matches the numbers on the pinout diagram)
 - Which pins are outputs (driving components) vs inputs (reading sensors)
 - Initial states (everything starts OFF)
-- Sets up PWM on the servo pin
+- Sets up 50 Hz PWM on both servo pins
 
 ---
 
-### Section 4: Stepper Motor (`STEP_SEQUENCE`, `stepper_step`, `rotate_stepper`)
+### Section 4: Servo Control (`set_servo_angle`)
 
-The garage door is driven by a **28BYJ-48 stepper motor** connected via a **ULN2003 driver board**.
+Both doors are driven by **SG90 hobby servos** — the garage door on GPIO 27, the
+front door on GPIO 23. Neither needs a driver board.
 
-**Why a driver board?**
-The Pi's GPIO pins can only supply ~16mA. The motor needs more. The ULN2003 board contains transistors that use 5V power to drive the motor using the Pi's pins as signals only.
+**Why no driver board?**
+A servo has its own motor, gearbox and control circuit inside. The Pi only sends
+it a low-current *signal*; the servo does the work. The 5V pin supplies enough
+current for an SG90 directly.
 
-**How the motor moves:**
-The `STEP_SEQUENCE` is a table of eight patterns. Each pattern energises different coils inside the motor. Cycling through these patterns in order makes the shaft turn forward; cycling in reverse makes it turn backward.
+**How the servo knows where to go:**
+The Pi sends a 50 Hz pulse train. The *width* of each pulse tells the servo the
+angle. The servo compares that against its internal position sensor and drives
+its motor until they match, then holds.
 
 ```python
-STEP_SEQUENCE = [
-    [1, 0, 0, 1],   # Step 1 — energise coils A and D
-    [1, 0, 0, 0],   # Step 2 — energise coil A only
-    ...
-]
+duty = (angle / 180.0) * 10 + 2   # 0° → 2%, 180° → 12%
+pwm.ChangeDutyCycle(duty)
+time.sleep(0.8)                    # give the servo time to travel
+pwm.ChangeDutyCycle(0)             # stop pulsing so it doesn't hum
 ```
 
-`GARAGE_TRAVEL_STEPS = 100` controls how far the door travels. Increase this number to make the door go further.
+One function serves both doors — you pass in the PWM object for whichever servo
+you want to move. `control_garage_door()` and `control_door()` both map
+**open = 90°, closed = 0°**. Change those angles to match how you physically
+mount the servo horn.
+
+**Teaching point:** this is the difference between *open-loop* and *closed-loop*
+control. A stepper (the old design) is open-loop — you count steps and hope. A
+servo is closed-loop — it measures its own position and corrects itself.
 
 ---
 
@@ -326,16 +337,18 @@ Message arrives on "home/light"
 | Function | Hardware it controls | How |
 |---|---|---|
 | `control_light(state)` | LED on GPIO 17 | Sets pin HIGH or LOW |
-| `control_garage_door(open_door)` | Stepper motor via ULN2003 | Calls `rotate_stepper` forward or reverse |
-| `control_door(state)` | Servo motor on GPIO 23 | Calls `set_servo_angle(90)` or `set_servo_angle(0)` |
+| `control_garage_door(open_door)` | Servo motor on GPIO 27 | Calls `set_servo_angle(GARAGE_SERVO_PWM, 90 or 0)` |
+| `control_door(state)` | Servo motor on GPIO 23 | Calls `set_servo_angle(SERVO_PWM, 90 or 0)` |
+
+Both call the same `set_servo_angle()` helper — only the PWM object differs.
 
 ---
 
-### Section 7: Motor Utilities
+### Section 7: Shutdown
 
-- `stop_stepper()` — sets all four stepper pins LOW (de-energises coils)
-- `stop_garage_emergency()` — calls `stop_stepper()` immediately (used on crash/shutdown)
-- `get_garage_motor_status()` — returns a dictionary of current motor state (for diagnostics)
+- `cleanup_and_exit()` — stops both PWM channels and releases the GPIO pins
+- Runs from the `finally` block in `main()`, so it executes even on a crash
+- The MQTT "last will" message also tells the app the controller went offline
 
 ---
 
@@ -520,9 +533,9 @@ Then use the iPad app to control devices. Observe every message published in bot
 
 iOS does not have a built-in MQTT library. WebSocket is a standard protocol that iOS's `URLSession` supports natively. By telling Mosquitto to accept MQTT packets wrapped in WebSocket frames (on port 9001), we can talk MQTT from any iOS app without third-party libraries.
 
-**Q: Why do we use four GPIO pins for one motor?**
+**Q: Why does each servo need only one GPIO pin?**
 
-The stepper motor has four electromagnetic coils inside. Each GPIO pin controls one coil. We need all four to create the rotating magnetic field that makes the shaft spin.
+Everything the servo needs to know travels on a single signal wire, encoded as the width of a repeating pulse. The servo's own circuit reads that pulse and drives its motor. (The earlier stepper design needed four pins, because the Pi had to energise each of the motor's four coils itself.)
 
 **Q: Why not just use `GPIO.HIGH/LOW` for the servo too?**
 
@@ -530,7 +543,7 @@ Servos need a very precise timing signal (a pulse between 1ms and 2ms wide, repe
 
 **Q: What happens if the Pi crashes while the motor is running?**
 
-The `cleanup_and_exit()` function runs in the `finally` block of `main()`, which Python always executes even on a crash. It calls `stop_garage_emergency()` to de-energise all motor coils before the process exits. The MQTT "last will" message also tells the app the controller went offline.
+The `cleanup_and_exit()` function runs in the `finally` block of `main()`, which Python always executes even on a crash. It stops both PWM channels and releases the GPIO pins before the process exits. The MQTT "last will" message also tells the app the controller went offline.
 
 **Q: Why does `retain=True` matter on status topics?**
 
