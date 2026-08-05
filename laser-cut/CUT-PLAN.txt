@@ -19,6 +19,12 @@ Part numbers match PART-CHART.pdf and the PART LIBRARY below. They are
 geometry IDs assigned by size, NOT the 01-55 step callouts used in
 Simpsons_House_Assemble.pdf.
 
+Numbers sit on material only, clear of every cut and score line, and
+are turned 90 degrees where that is the only way they fit. Parts marked
+'no room' are too narrow to take a number at a readable size; each of
+them belongs to a set of identical parts, so they are interchangeable
+and can be told apart from PART-CHART.pdf.
+
 PART LIBRARY (one house)
 ----------------------------------------------------------------------
   ID     width    height  entities  engraved
@@ -37,43 +43,43 @@ PART LIBRARY (one house)
   12     63.47     60.85        22     7.0 mm
   13     63.47     57.55        20     7.0 mm
   14    133.48     26.95        42     7.0 mm
-  15     32.58    103.05        14     7.0 mm
+  15     32.58    103.05        14  3.1 mm rot
   16    130.48     19.18        50     7.0 mm
   17     24.43     87.08        61     7.0 mm
   18     24.43     87.08        60     7.0 mm
-  19     76.90     19.18        34     5.7 mm
-  20     24.21     58.12        68     7.0 mm
+  19     76.90     19.18        34  7.0 mm rot
+  20     24.21     58.12        68     6.9 mm
   21     41.96     23.30        27     7.0 mm
-  22     23.30     41.96        35     3.5 mm
-  23     41.96     23.30        35     3.5 mm
-  24     41.96     23.30        35     3.5 mm
-  25     41.96     23.30        35     3.5 mm
-  26     39.01     20.87         8     7.0 mm
-  27     39.01     20.87         8     7.0 mm
+  22     23.30     41.96        35  6.4 mm rot
+  23     41.96     23.30        35     6.4 mm
+  24     41.96     23.30        35     6.4 mm
+  25     41.96     23.30        35     6.4 mm
+  26     39.01     20.87         8  1.8 mm rot
+  27     39.01     20.87         8  1.8 mm rot
   28     19.18     41.79        22     7.0 mm
   29     22.07     35.65         4     7.0 mm
-  30     35.70     20.07         8     7.0 mm
-  31     23.34     22.89        16     7.0 mm
-  32     23.34     22.89        16     7.0 mm
-  33     12.00     43.70        28     5.6 mm
-  34     13.47     38.34        83     3.0 mm
-  35     40.04     11.97         8     5.6 mm
+  30     35.70     20.07         8     2.0 mm
+  31     23.34     22.89        16    no room
+  32     23.34     22.89        16    no room
+  33     12.00     43.70        28  7.0 mm rot
+  34     13.47     38.34        83  5.1 mm rot
+  35     40.04     11.97         8     1.9 mm
   36     23.95     19.54        12     7.0 mm
-  37     14.96     25.89         8     4.3 mm
-  38     14.96     25.89         8     4.3 mm
-  39     19.18     20.05         8     7.0 mm
-  40     22.89     13.29        16     6.3 mm
-  41     22.89     13.29        16     6.3 mm
-  42     22.89     13.29        16     6.3 mm
-  43     13.29     22.89        16     6.3 mm
-  44     23.18     12.00        28     4.0 mm
-  45     20.00     12.43         8     5.8 mm
-  46     18.38     12.00        32     4.3 mm
-  47     14.70     14.56         7     2.4 mm
-  48     14.70     14.56         7     2.4 mm
-  49     14.70     14.56         7     2.4 mm
-  50     14.70     14.56         7     2.4 mm
-  51     13.17     15.10        12     4.0 mm
+  37     14.96     25.89         8     6.1 mm
+  38     14.96     25.89         8     6.1 mm
+  39     19.18     20.05         8     3.9 mm
+  40     22.89     13.29        16    no room
+  41     22.89     13.29        16    no room
+  42     22.89     13.29        16    no room
+  43     13.29     22.89        16    no room
+  44     23.18     12.00        28     5.3 mm
+  45     20.00     12.43         8     1.8 mm
+  46     18.38     12.00        32     6.5 mm
+  47     14.70     14.56         7     3.0 mm
+  48     14.70     14.56         7     3.0 mm
+  49     14.70     14.56         7     3.0 mm
+  50     14.70     14.56         7     3.0 mm
+  51     13.17     15.10        12  5.1 mm rot
 
 SHEET CONTENTS
 ----------------------------------------------------------------------
@@ -293,7 +299,7 @@ the panels, or say which part and where, and they can be added.
 
 OPEN CONTOURS IN THE SOURCE
 ----------------------------------------------------------------------
-54 outline gaps found, largest 0.090 mm.
+27 outline gaps found, largest 0.090 mm.
 Bridged for analysis only - the cut geometry is passed through
 untouched. Most laser software cuts open paths fine, but if yours
 needs closed contours, weld with a 0.1 mm tolerance on import.

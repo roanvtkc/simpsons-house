@@ -28,15 +28,24 @@ def text_width(s):
     return len(s) * GW + max(0, len(s) - 1) * GAP
 
 
-def strokes(s, height, cx, cy):
-    """Polylines for string `s`, cap height `height`, centred on (cx, cy)."""
+def strokes(s, height, cx, cy, angle=0):
+    """Polylines for string `s`, cap height `height`, centred on (cx, cy).
+
+    `angle` turns the text about its centre (degrees, anticlockwise).
+    """
+    import math
     k = height / GH
     w = text_width(s) * k
-    x0 = cx - w / 2
-    y0 = cy - height / 2
+    x0 = -w / 2
+    y0 = -height / 2
+    ca, sa = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+
+    def place(px, py):
+        return (cx + px * ca - py * sa, cy + px * sa + py * ca)
+
     out = []
     for i, ch in enumerate(s):
         ox = x0 + i * (GW + GAP) * k
         for poly in GLYPHS[ch]:
-            out.append([(ox + px * k, y0 + py * k) for px, py in poly])
+            out.append([place(ox + px * k, y0 + py * k) for px, py in poly])
     return out

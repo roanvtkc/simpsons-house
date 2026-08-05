@@ -15,6 +15,13 @@ Each file has three layers:
 | `ENGRAVE` | Part numbers, single-stroke. Run as a light score, or switch off. |
 | `SHEET` | 600 × 450 reference rectangle. **Not for cutting** — switch off or delete. |
 
+**46 of 52 parts carry a number.** Each number sits on material only, at least
+0.35 mm clear of every cut and score line, turned 90° where a narrow frame band
+is the only place it fits. The six that are blank (31, 32, 40–43) are window
+inserts whose bars are 2.5 mm wide — too narrow for a readable number. Each
+belongs to a set of identical parts, so they are interchangeable; identify them
+from `PART-CHART.pdf`.
+
 ## Reference
 
 | File | Contents |
@@ -67,9 +74,11 @@ Useful flags: `--copies N` (default 10), `--gap`, `--margin`, `--no-rotate`,
 | Script | Role |
 |---|---|
 | `parts.py` | Reads the DXF, groups loose lines into parts by endpoint connectivity, absorbs holes |
-| `labels.py` | Builds each part's solid region, finds the point furthest from any edge for the number |
+| `labels.py` | Builds each part's solid region and finds where a number fits |
 | `strokefont.py` | Single-stroke digits |
+| `verify_labels.py` | Independent check that a number is on material — ray casting against the raw cut segments |
 | `nest.py` | Packs parts onto sheets, verifies, writes DXFs and the cut plan |
+| `check_sheets.py` | End-to-end check of the written DXFs (`python check_sheets.py ../sheets-600x450`) |
 | `chart.py` | Renders the part identification chart |
 | `shapes.py` | Reports which parts are duplicates |
 
@@ -78,3 +87,12 @@ part identity is reconstructed from endpoint connectivity rather than read
 directly. `nest.py` self-checks on every run: no part overlaps, everything
 inside the margin, every engraved number lands on material, and the entity count
 round-trips through the written files.
+
+Engrave placement is checked **twice, by two independent routes**. `labels.py`
+decides where a number goes from the part's solid region; `verify_labels.py`
+then re-tests it by ray casting against the raw cut segments, never touching
+that solid. This matters: an earlier version checked the text against the same
+solid that positioned it, so when the solid was wrong the numbers landed in
+window openings and the check still passed. `check_sheets.py` closes the loop by
+re-deriving the material from the finished DXFs, which is the only check that
+can catch a bad transform on a rotated copy.

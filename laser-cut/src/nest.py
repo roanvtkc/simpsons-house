@@ -7,7 +7,8 @@ import ezdxf
 from rectpack import newPacker, SkylineBl, SORT_LSIDE
 from parts import load_components, merge_nested, bbox_of, SRC
 import labels as labelmod
-from labels import part_solid, label_spot
+from labels import part_solid, part_lines, label_spot
+from verify_labels import check_part, MIN_GAP
 import strokefont
 
 AP = argparse.ArgumentParser()
@@ -47,40 +48,44 @@ if args.keep_strays:
 records.sort(key=lambda r: -(r['w'] * r['h']))
 print(f"parts/house: {len(records)}   excluded strays: {len(strays)}")
 # -------------------------------------------------- engrave label per part
-# Position is the point of the part furthest from any cut edge, so the number
-# always lands on material and never in a hole or off a concave edge.
+# The number goes at the roomiest spot on the part's material, turned along the
+# grain of a narrow band if that is the only way it fits. Holes, scrap and open
+# score lines are all treated as obstacles.
 if not args.no_engrave:
     unlabelled = []
     for pi, r in enumerate(records):
         solid = part_solid(ents, r['idx'], tag=pi)
-        spot = label_spot(solid)
+        spot = label_spot(solid, lines=part_lines(ents, r['idx']))
         if spot is None:
             r['label'] = None
             unlabelled.append(pi)
         else:
-            lx, ly, lh = spot
-            r['label'] = (lx - r['ox'], ly - r['oy'], lh)   # part-local
-    # every stroke of every number must lie on material. The nest transform is
-    # rigid, so checking once per part in source coordinates covers all copies.
-    from shapely.geometry import LineString as _LS
+            lx, ly, lh, la = spot
+            r['label'] = (lx - r['ox'], ly - r['oy'], lh, la)   # part-local
+
+    # Independent check -- deliberately does NOT reuse part_solid(). An earlier
+    # version validated the text against the same solid that positioned it, so a
+    # wrong solid passed its own check and numbers landed in window openings.
+    # check_part() works from the raw cut segments instead.
     bad = []
     for pi, r in enumerate(records):
         if not r['label']:
             continue
-        lx, ly, lh = r['label']
-        solid = part_solid(ents, r['idx'], tag=pi)
-        for poly in strokefont.strokes(f"{pi:02d}", lh,
-                                       lx + r['ox'], ly + r['oy']):
-            if not solid.contains(_LS(poly)):
-                bad.append(pi)
-                break
+        lx, ly, lh, la = r['label']
+        problems = check_part(ents, r['idx'], f"{pi:02d}",
+                              (lx + r['ox'], ly + r['oy'], lh, la))
+        if problems:
+            bad.append((pi, problems[0]))
     if bad:
-        raise SystemExit(f"ENGRAVE CHECK FAILED: numbers fall off material on "
-                         f"parts {sorted(set(bad))}")
-    print("engrave check: every number lies inside its part  [OK]")
+        for pi, p in bad:
+            print(f"  !! part {pi}: {p}")
+        raise SystemExit(f"ENGRAVE CHECK FAILED on {len(bad)} parts")
+    print(f"engrave check: {sum(1 for r in records if r['label'])} numbers verified "
+          f"on material and >= {MIN_GAP} mm from every cut  [OK]")
     n_lab = sum(1 for r in records if r['label'])
-    print(f"engrave: {n_lab}/{len(records)} parts numbered"
-          + (f", too small to number: {unlabelled}" if unlabelled else ""))
+    n_rot = sum(1 for r in records if r['label'] and r['label'][3])
+    print(f"engrave: {n_lab}/{len(records)} parts numbered ({n_rot} turned 90 deg)"
+          + (f"; no room on {unlabelled}" if unlabelled else ""))
     if labelmod.GAPS:
         worst = max(d for _, d in labelmod.GAPS)
         print(f"note: bridged {len(labelmod.GAPS)} open-contour gaps in the source "
@@ -204,11 +209,16 @@ for si, b in enumerate(sheets, 1):
         ty = y + args.margin + args.gap / 2
         for i in r['idx']:
             emit(ents[i], tx, ty, rot, msp, 'CUT')
-        # part number, kept upright even when the part is rotated
+        # Part number. When the nester turns a part 90 deg the number turns with
+        # it -- a number sized to run along a narrow band stops fitting the
+        # moment it is held upright against a rotated part.
         if r['label']:
-            lx, ly, lh = r['label']
+            lx, ly, lh, la = r['label']
             LX, LY = (-ly + e_h, lx) if rot else (lx, ly)
-            for poly in strokefont.strokes(f"{pi:02d}", lh, LX + tx, LY + ty):
+            # mod 180: a half turn maps the text box onto itself, so this
+            # never changes whether it fits, but keeps digits off upside-down
+            ang = (la + (90 if rot else 0)) % 180
+            for poly in strokefont.strokes(f"{pi:02d}", lh, LX + tx, LY + ty, ang):
                 for p, q in zip(poly, poly[1:]):
                     msp.add_line(p, q, dxfattribs={'layer': 'ENGRAVE'})
         used += r['w'] * r['h']
@@ -260,10 +270,11 @@ for si, b in enumerate(sheets):
                 svg.append(f'<circle cx="{c[0]:.2f}" cy="{c[1]:.2f}" r="{e.dxf.radius:.2f}"/>')
         svg.append('</g>')
         if r['label']:
-            lx, ly, lh = r['label']
+            lx, ly, lh, la = r['label']
             LX, LY = (-ly + e_h, lx) if rot else (lx, ly)
             svg.append('<g stroke="#111" fill="none" stroke-width="0.5">')
-            for poly in strokefont.strokes(f"{pi:02d}", lh, LX + tx, LY + ty):
+            ang = (la + (90 if rot else 0)) % 180
+            for poly in strokefont.strokes(f"{pi:02d}", lh, LX + tx, LY + ty, ang):
                 d = " ".join(f"{'M' if k == 0 else 'L'}{px:.2f},{SH-py:.2f}"
                              for k, (px, py) in enumerate(poly))
                 svg.append(f'<path d="{d}"/>')
@@ -301,12 +312,19 @@ lines = ["SIMPSONS HOUSE - NESTED CUT PLAN",
          "geometry IDs assigned by size, NOT the 01-55 step callouts used in",
          "Simpsons_House_Assemble.pdf.",
          "",
+         "Numbers sit on material only, clear of every cut and score line, and",
+         "are turned 90 degrees where that is the only way they fit. Parts marked",
+         "'no room' are too narrow to take a number at a readable size; each of",
+         "them belongs to a set of identical parts, so they are interchangeable",
+         "and can be told apart from PART-CHART.pdf.",
+         "",
          "PART LIBRARY (one house)",
          "-" * 70,
          f"{'ID':>4}  {'width':>8}  {'height':>8}  {'entities':>8}  {'engraved':>8}",
          ]
 for pi, r in enumerate(records):
-    tag = f"{r['label'][2]:.1f} mm" if r['label'] else "too small"
+    tag = (f"{r['label'][2]:.1f} mm" + (" rot" if r['label'][3] else "")) \
+        if r['label'] else "no room"
     lines.append(f"{pi:4d}  {r['w']:8.2f}  {r['h']:8.2f}  {len(r['idx']):8d}  {tag:>9}")
 
 lines += ["", "SHEET CONTENTS", "-" * 70]
