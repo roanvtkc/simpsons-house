@@ -53,19 +53,30 @@ graph TD
 
 ### 0. Certificate Installation (Corporate Networks Only)
 
-If you're in a corporate environment with FortiGate firewalls or other SSL inspection systems, you may encounter certificate verification errors like:
+If you're in a corporate environment with FortiGate firewalls or other SSL inspection systems, `setup.sh` will fail at the "Upgrading pip and setuptools" step with certificate errors like:
 
-```bash
-fatal: unable to access 'https://github.com/...': server certificate verification failed. CAfile: none CRLfile: none
 ```
+ERROR: Could not find a version that satisfies the requirement setuptools (from versions: none)
+ERROR: No matching distribution found for setuptools
+```
+
+with `SSLError(SSLCertVerificationError(... self-signed certificate in certificate chain))` above it in `/tmp/simpsons_house_debug.log`.
 
 **Quick Certificate Installation:**
 ```bash
-# Download and run the certificate installer
-wget http://10.20.1.83:8081/install_ca.sh
+# Run the certificate installer from this repo
 chmod +x install_ca.sh
 ./install_ca.sh
 ```
+
+> **Note:** run the copy in this repo. A copy is also published at
+> `http://10.20.1.83:8081/install_ca.sh`, but it may lag behind this one.
+
+The installer adds the FortiGate SSL-inspection CA (`O=Fortinet`) to the system
+trust store. Note that `git clone` from GitHub works *without* this — github.com
+is exempt from deep inspection — so a successful clone is not evidence that the
+certificate is installed. The Python package indexes (pypi.org, piwheels.org,
+files.pythonhosted.org) *are* inspected, which is why `setup.sh` fails without it.
 
 ### 1. Hardware Setup
 

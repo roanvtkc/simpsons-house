@@ -9,11 +9,27 @@ set -e
 # which breaks HTTPS even after the CA cert is installed.
 
 # Configuration
-CERT_PATH="/usr/local/share/ca-certificates/wirelesstkc.crt"
-DOWNLOAD_URL="http://10.20.1.83:8081/wirelesstkc.pem"
-BACKUP_PATH="/usr/local/share/ca-certificates/wirelesstkc.crt.backup"
+#
+# NOTE: this must be the FortiGate SSL-inspection CA (O=Fortinet), NOT
+# wirelesstkc.pem. That file is the 802.1X/RADIUS server certificate for
+# wireless.tkc.wa.edu.au — a self-signed *leaf*, not a CA. Installing it
+# does nothing for SSL inspection, which is what broke pip installs.
+CERT_PATH="/usr/local/share/ca-certificates/tkc-fortigate-ca.crt"
+DOWNLOAD_URL="http://10.20.1.83:8081/fortigate.crt"
+BACKUP_PATH="/usr/local/share/ca-certificates/tkc-fortigate-ca.crt.backup"
 CERT_SERVER="10.20.1.83"
 LOG_PREFIX="[CA Install]"
+
+# Expected CA identity. The structural checks (self-signed, CA:TRUE, O=Fortinet)
+# are enforced; the fingerprint is advisory and only warns on mismatch, so a
+# FortiGate replacement doesn't hard-fail the installer.
+EXPECTED_CA_ORG="Fortinet"
+EXPECTED_FINGERPRINT="EB:81:07:CC:EF:5A:27:A7:0A:02:CD:97:E7:E3:EB:04:48:62:17:BE:3C:3D:82:1A:EE:DA:CA:F0:2E:CB:FC:B9"
+
+# A host that IS subject to SSL inspection, used for the live verification test.
+# Do not use github.com here — it is exempt from deep inspection at TKC, so it
+# succeeds even when the CA is missing and hides the failure.
+VERIFY_URL="https://pypi.org/simple/"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -77,16 +93,51 @@ EOF'
 # Certificate installation steps
 # -----------------------------------------------------------------------------
 
+# Validate that a PEM file really is the FortiGate SSL-inspection CA.
+# Used both on the freshly downloaded file and on the already-installed one.
+is_fortigate_ca() {
+    local cert="$1"
+
+    [ -f "$cert" ] || return 1
+    openssl x509 -in "$cert" -noout >/dev/null 2>&1 || return 1
+
+    # Must be a CA, not a leaf. This is the check that would have caught
+    # wirelesstkc.pem being installed here.
+    if ! openssl x509 -in "$cert" -noout -text 2>/dev/null \
+         | grep -A1 "X509v3 Basic Constraints" | grep -q "CA:TRUE"; then
+        return 1
+    fi
+
+    # Must be self-signed (subject == issuer) — it's a root.
+    local subj issuer
+    subj=$(openssl x509 -in "$cert" -noout -subject 2>/dev/null | sed 's/^subject=//')
+    issuer=$(openssl x509 -in "$cert" -noout -issuer 2>/dev/null | sed 's/^issuer=//')
+    [ "$subj" = "$issuer" ] || return 1
+
+    # Must be the FortiGate's CA specifically.
+    echo "$subj" | grep -q "O *= *${EXPECTED_CA_ORG}" || return 1
+
+    return 0
+}
+
 check_existing_certificate() {
-    # Check the cert file exists AND is already trusted by the system.
     # NOTE: grep-ing ca-certificates.crt for a name will never work —
     # PEM bundle data is base64-encoded binary, not readable text.
-    # We use openssl verify instead.
-    if [ -f "$CERT_PATH" ] && openssl verify "$CERT_PATH" >/dev/null 2>&1; then
-        log "TKC FortiGate CA certificate is already installed and trusted."
-        return 0
+    #
+    # `openssl verify` alone is ALSO not enough: it returns OK for *any*
+    # self-signed cert already present in the trust store, so a wrong cert
+    # sitting at CERT_PATH reports "already installed" forever. We check the
+    # cert's identity as well as its trust status.
+    if ! is_fortigate_ca "$CERT_PATH"; then
+        return 1
     fi
-    return 1
+
+    if ! openssl verify "$CERT_PATH" >/dev/null 2>&1; then
+        return 1
+    fi
+
+    log "TKC FortiGate CA certificate is already installed and trusted."
+    return 0
 }
 
 check_connectivity() {
@@ -101,9 +152,9 @@ check_connectivity() {
 }
 
 download_certificate() {
-    log "Downloading TKC Wireless CA certificate from $DOWNLOAD_URL..."
+    log "Downloading TKC FortiGate SSL-inspection CA from $DOWNLOAD_URL..."
 
-    local temp_cert="/tmp/wirelesstkc_temp.pem"
+    local temp_cert="/tmp/tkc_fortigate_ca_temp.pem"
 
     if ! sudo wget --timeout=30 --tries=3 \
                    --user-agent="Simpson's House Setup" \
@@ -117,6 +168,28 @@ download_certificate() {
         error "Downloaded file is not a valid X.509 certificate"
         rm -f "$temp_cert"
         return 1
+    fi
+
+    # Confirm we got the SSL-inspection CA and not some other cert the
+    # server happens to publish (e.g. wirelesstkc.pem, a self-signed leaf).
+    if ! is_fortigate_ca "$temp_cert"; then
+        error "Downloaded certificate is not the FortiGate SSL-inspection CA"
+        error "Expected a self-signed CA with O=${EXPECTED_CA_ORG}, got:"
+        openssl x509 -in "$temp_cert" -noout -subject -issuer 2>&1 | sed 's/^/    /'
+        rm -f "$temp_cert"
+        return 1
+    fi
+
+    local got_fp
+    got_fp=$(openssl x509 -in "$temp_cert" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
+    if [ "$got_fp" != "$EXPECTED_FINGERPRINT" ]; then
+        warn "CA fingerprint differs from the expected value."
+        warn "  expected: $EXPECTED_FINGERPRINT"
+        warn "  got:      $got_fp"
+        warn "This is expected if the FortiGate was replaced or its CA reissued."
+        warn "Confirm against the firewall, then update EXPECTED_FINGERPRINT in this script."
+    else
+        log "CA fingerprint matches expected value"
     fi
 
     if [ -f "$CERT_PATH" ]; then
@@ -155,6 +228,12 @@ update_trust_store() {
 verify_installation() {
     log "Verifying certificate installation..."
 
+    # 0. Identity check — make sure CERT_PATH holds the FortiGate CA at all.
+    if ! is_fortigate_ca "$CERT_PATH"; then
+        error "$CERT_PATH is not the FortiGate SSL-inspection CA"
+        return 1
+    fi
+
     # 1. Trust store check — use openssl verify, NOT grep.
     # ca-certificates.crt is a PEM bundle of base64-encoded binary data;
     # cert names never appear as readable text inside it.
@@ -173,10 +252,48 @@ verify_installation() {
     log "Certificate details:"
     openssl x509 -in "$CERT_PATH" -subject -issuer -dates -noout 2>/dev/null || true
 
-    # 3. Real HTTPS test — this is where clock-skew failures surface
-    log "Testing live HTTPS connection to GitHub..."
-    if curl -sf --max-time 15 https://github.com > /dev/null 2>&1; then
-        log "✅ HTTPS to GitHub successful"
+    # 3. Real HTTPS test against an SSL-INSPECTED host.
+    # github.com is exempt from deep inspection at TKC and presents a genuine
+    # public chain, so testing it passes even with no CA installed — that is
+    # exactly how a broken install previously reported success while every
+    # Python package index still failed.
+    log "Testing live HTTPS connection to ${VERIFY_URL} (SSL-inspected)..."
+    if curl -sf --max-time 15 "$VERIFY_URL" > /dev/null 2>&1; then
+        log "✅ HTTPS through SSL inspection successful"
+
+        # pip on Debian/Raspberry Pi OS uses the system trust store via its
+        # vendored certifi, so curl succeeding is a good sign — but verify with
+        # Python directly, since that is what actually runs pip.
+        #
+        # We clear VERIFY_X509_STRICT to mirror pip. Python 3.13 turns strict
+        # RFC 5280 checking on by default in ssl.create_default_context(), and
+        # the FortiGate CA has no Authority Key Identifier extension, so strict
+        # mode rejects it. pip is unaffected because urllib3 builds its own
+        # context without that flag. See the warning below.
+        log "Verifying Python/pip can validate the inspected connection..."
+        if python3 - <<'PYEOF' >/dev/null 2>&1
+import socket, ssl, sys
+ctx = ssl.create_default_context()
+ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+with socket.create_connection(("pypi.org", 443), 15) as sock:
+    with ctx.wrap_socket(sock, server_hostname="pypi.org"):
+        pass
+PYEOF
+        then
+            log "✅ Python TLS verification successful — pip installs will work"
+        else
+            warn "Python could not verify the connection even though curl could."
+            warn "If pip still fails, check for a stale venv or a PIP_CERT override."
+        fi
+
+        # Heads-up for anything that is NOT pip.
+        if ! python3 -c "import urllib.request; urllib.request.urlopen('${VERIFY_URL}', timeout=15)" >/dev/null 2>&1; then
+            warn "Note: Python's stdlib urllib/requests still reject this CA under"
+            warn "VERIFY_X509_STRICT (on by default from Python 3.13) because the"
+            warn "FortiGate CA omits the Authority Key Identifier extension."
+            warn "pip, curl and git are unaffected. If you write Python that makes"
+            warn "HTTPS calls on this Pi, clear ssl.VERIFY_X509_STRICT on the context."
+        fi
         return 0
     fi
 
@@ -184,8 +301,9 @@ verify_installation() {
     error "HTTPS test failed. Diagnosing..."
     log "Current system time: $(date)"
 
+    # -sS (not -sf) so curl prints the actual TLS error instead of staying silent.
     local curl_err
-    curl_err=$(curl -sf --max-time 15 https://github.com 2>&1 || true)
+    curl_err=$(curl -sS --max-time 15 -o /dev/null "$VERIFY_URL" 2>&1 || true)
     log "curl error: $curl_err"
 
     if echo "$curl_err" | grep -q "not yet valid\|certificate has expired\|certificate verify"; then
@@ -204,7 +322,7 @@ verify_installation() {
 # -----------------------------------------------------------------------------
 
 cleanup() {
-    rm -f /tmp/wirelesstkc_temp.pem
+    rm -f /tmp/tkc_fortigate_ca_temp.pem
 }
 
 # -----------------------------------------------------------------------------
