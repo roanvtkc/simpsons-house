@@ -4,7 +4,7 @@ Writes one DXF per sheet plus an SVG/PNG preview of the whole run.
 """
 import argparse, math, os, collections
 import ezdxf
-from rectpack import newPacker, SkylineBl, SORT_LSIDE
+from rectpack import newPacker, MaxRectsBssf, SORT_AREA, PackingBin
 from parts import load_components, merge_nested, bbox_of, SRC
 import labels as labelmod
 from labels import part_solid, part_lines, label_spot
@@ -104,8 +104,11 @@ for pi, r in enumerate(records):
                          f"fit the usable area {UW:.0f}x{UH:.0f} in either orientation")
 
 # ------------------------------------------------------------------- packing
-packer = newPacker(pack_algo=SkylineBl, sort_algo=SORT_LSIDE,
-                   rotation=not args.no_rotate)
+# MaxRects best-short-side-fit is materially better for mixed-size panels than
+# the earlier bottom-left skyline heuristic. In particular it reaches the
+# three-sheet theoretical minimum for two houses on 450 x 450 mm stock.
+packer = newPacker(pack_algo=MaxRectsBssf, sort_algo=SORT_AREA,
+                   bin_algo=PackingBin.BBF, rotation=not args.no_rotate)
 # Reserve w+gap x h+gap per part inside a bin of exactly USABLE, then draw the
 # part inset by gap/2 -- that guarantees >= gap clearance to every neighbour and
 # >= margin to the sheet edge.
@@ -305,7 +308,7 @@ lines = ["SIMPSONS HOUSE - NESTED CUT PLAN",
          "  CUT      the part outlines. This is the only layer that must be cut.",
          "  ENGRAVE  part numbers, single-stroke. Run as a light score/engrave,",
          "           or switch the layer off if you do not want visible marks.",
-         "  SHEET    600x450 reference rectangle. Not for cutting - delete or",
+         f"  SHEET    {SW:.0f}x{SH:.0f} reference rectangle. Not for cutting - delete or",
          "           switch off before sending to the laser.",
          "",
          "Part numbers match PART-CHART.pdf and the PART LIBRARY below. They are",

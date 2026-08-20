@@ -1,11 +1,26 @@
 # Laser-cut enclosure
 
 Cut files for the physical Simpsons House model that the Raspberry Pi hardware
-goes into. Nested for a **600 × 450 mm** bed, **10 houses per run**.
+goes into.
+
+## Available layouts
+
+| Folder | Bed/stock size | Houses | Sheets | Average utilisation |
+|---|---:|---:|---:|---:|
+| `sheets-450x450-two-houses/` | 450 × 450 mm | 2 | 3 | 83.6% |
+| `sheets-600x450/` | 600 × 450 mm | 10 | 11 | 85.5% |
+
+The two-house layout uses the theoretical minimum of three 450 × 450 sheets:
+the combined part bounding-box area will not fit on two sheets.
 
 ## What to send to the laser
 
-`sheets-600x450/sheet-01.dxf` … `sheet-11.dxf` — eleven sheets, in millimetres.
+For two houses on the 450 × 450 mm RedSail, send
+`sheets-450x450-two-houses/sheet-01.dxf` … `sheet-03.dxf`. The files are in
+millimetres.
+
+For the original ten-house run, use `sheets-600x450/sheet-01.dxf` …
+`sheet-11.dxf`.
 
 Each file has three layers:
 
@@ -13,7 +28,7 @@ Each file has three layers:
 |---|---|
 | `CUT` | Cut this. Part outlines only. |
 | `ENGRAVE` | Part numbers, single-stroke. Run as a light score, or switch off. |
-| `SHEET` | 600 × 450 reference rectangle. **Not for cutting** — switch off or delete. |
+| `SHEET` | Reference rectangle matching the selected sheet size. **Not for cutting** — switch off or delete. |
 
 **46 of 52 parts carry a number.** Each number sits on material only, at least
 0.35 mm clear of every cut and score line, turned 90° where a narrow frame band
@@ -26,13 +41,21 @@ from `PART-CHART.pdf`.
 
 | File | Contents |
 |---|---|
-| `CUT-PLAN.txt` | Part library with sizes, and what sits on each sheet |
+| `sheets-*/CUT-PLAN.txt` | Part library with sizes, and what sits on each sheet for that layout |
 | `PART-CHART.pdf` | Every part drawn and numbered — use it to identify cut pieces |
 | `ASSEMBLY-MAPPING.md` | Proposed mapping from engraved numbers to the assembly-instruction step numbers, graded by confidence |
-| `nest-preview.png` | All eleven sheets at a glance |
+| `sheets-*/nest-preview.png` | All sheets in that layout at a glance |
 | `source/` | The original Shapr3D DXF export |
 
-## Results
+## Two-house 450 × 450 results
+
+- 52 parts per house, 104 parts across 3 sheets
+- 83.6% average sheet utilisation: 88.8%, 87.0%, and 75.0%
+- 3 mm between part bounding boxes and a 5 mm border
+- All 4,106 cut entities verified present; no part overlaps; every part inside the margin
+- All 1,292 engrave strokes verified on material and at least 0.35 mm from a cut line
+
+## Ten-house 600 × 450 results
 
 - 52 parts per house (40 distinct shapes), 520 parts over 11 sheets
 - 85.5% average sheet utilisation; worst sheet 79.8%
@@ -62,6 +85,7 @@ a test joint before committing a full run of material.
 cd laser-cut/src
 pip install -r requirements.txt
 python nest.py --sheet-w 600 --sheet-h 450 --outdir ../sheets-600x450
+python nest.py --copies 2 --sheet-w 450 --sheet-h 450 --outdir ../sheets-450x450-two-houses
 python chart.py --out ../PART-CHART.svg
 ```
 
@@ -78,7 +102,7 @@ Useful flags: `--copies N` (default 10), `--gap`, `--margin`, `--no-rotate`,
 | `strokefont.py` | Single-stroke digits |
 | `verify_labels.py` | Independent check that a number is on material — ray casting against the raw cut segments |
 | `nest.py` | Packs parts onto sheets, verifies, writes DXFs and the cut plan |
-| `check_sheets.py` | End-to-end check of the written DXFs (`python check_sheets.py ../sheets-600x450`) |
+| `check_sheets.py` | End-to-end check of the written DXFs (`python check_sheets.py ../sheets-450x450-two-houses`) |
 | `chart.py` | Renders the part identification chart |
 | `shapes.py` | Reports which parts are duplicates |
 
