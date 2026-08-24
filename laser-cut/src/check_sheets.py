@@ -5,7 +5,7 @@ that every ENGRAVE stroke sits on material and clear of every CUT line. This is
 the check that would catch a bad transform on the rotated copies, because it
 never looks at the source drawing at all.
 """
-import glob, math, sys, collections
+import glob, math, os, re, sys, collections
 import ezdxf
 from shapely.geometry import LineString
 from shapely.ops import polygonize, unary_union
@@ -21,23 +21,31 @@ def snap(p):
 
 
 total_strokes = 0
+total_circles = 0
+circle_diameters = collections.Counter()
 problems = []
 
 for path in sorted(glob.glob(sys.argv[1] + "/sheet-*.dxf")):
     doc = ezdxf.readfile(path)
     msp = doc.modelspace()
     cut, eng = [], []
+    cut_circles = 0
     for e in msp:
         if e.dxf.layer == 'CUT':
             if e.dxftype() == 'LINE':
                 a, b = snap(e.dxf.start), snap(e.dxf.end)
                 if a != b:
                     cut.append(LineString([a, b]))
-            else:
+            elif e.dxftype() == 'CIRCLE':
+                cut_circles += 1
                 c, r = e.dxf.center, e.dxf.radius
+                circle_diameters[round(r * 2, 3)] += 1
                 pts = [(c[0] + r * math.cos(t * math.tau / 64),
                         c[1] + r * math.sin(t * math.tau / 64)) for t in range(65)]
                 cut.append(LineString(pts))
+            else:
+                problems.append(
+                    f"{path.split('/')[-1]}: unsupported CUT entity {e.dxftype()}")
         elif e.dxf.layer == 'ENGRAVE' and e.dxftype() == 'LINE':
             eng.append(LineString([(e.dxf.start[0], e.dxf.start[1]),
                                    (e.dxf.end[0], e.dxf.end[1])]))
@@ -79,16 +87,41 @@ for path in sorted(glob.glob(sys.argv[1] + "/sheet-*.dxf")):
                 near_cut += 1
                 break
     name = path.split('/')[-1]
+    total_circles += cut_circles
     if off_material or near_cut:
         problems.append(f"{name}: {off_material} strokes off material, "
                         f"{near_cut} closer than {MIN_GAP} mm to a cut")
-    print(f"  {name}: {len(eng):5d} engrave strokes, {len(cut):5d} cut lines "
+    print(f"  {name}: {len(eng):5d} engrave strokes, {len(cut):5d} cut entities, "
+          f"{cut_circles:3d} circles "
           f"-> {'OK' if not (off_material or near_cut) else 'PROBLEM'}")
 
 print()
+
+# The finished DXFs must contain the exact circular-cutout set authored for
+# every house: three 5 mm LED holes and three larger access ports. Read the
+# house count from the generated manifest so this independently checks every
+# supported quantity/layout.
+manifest = os.path.join(sys.argv[1], "CUT-PLAN.txt")
+if os.path.exists(manifest):
+    with open(manifest, encoding="utf-8") as f:
+        match = re.search(r"^Houses\s*:\s*(\d+)\s*$", f.read(), re.MULTILINE)
+    if match:
+        houses = int(match.group(1))
+        per_house = {5.000: 3, 22.361: 1, 36.056: 1, 50.000: 1}
+        expected_diameters = collections.Counter(
+            {diameter: count * houses for diameter, count in per_house.items()})
+        if circle_diameters != expected_diameters:
+            problems.append(
+                f"circular cutouts: found {dict(circle_diameters)}, "
+                f"expected {dict(expected_diameters)}")
+
 if problems:
     for p in problems:
         print("  !!", p)
     raise SystemExit("END-TO-END CHECK FAILED")
 print(f"END-TO-END CHECK PASSED: {total_strokes} engrave strokes, all on "
-      f"material and >= {MIN_GAP} mm from every cut line")
+      f"material and >= {MIN_GAP} mm from every cut line; "
+      f"{total_circles} circular cutouts present")
+print("  cutout diameters: " + ", ".join(
+    f"diameter {diameter:g} mm x {count}"
+    for diameter, count in sorted(circle_diameters.items())))

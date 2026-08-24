@@ -2,10 +2,10 @@ SIMPSONS HOUSE - NESTED CUT PLAN
 ======================================================================
 Source      : Simpsons House with precuts.dxf
 Houses      : 10
-Sheet       : 600 (X) x 450 (Y) mm, 5.0 mm border, 3.0 mm between parts
+Sheet       : 450 (X) x 450 (Y) mm, 5.0 mm border, 3.0 mm between parts
 Parts/house : 52   Total parts: 520
 Cutouts     : 6 circular panel cutouts/house   60 total
-Sheets      : 11
+Sheets      : 15
 Units       : millimetres (DXF $INSUNITS = 4)
 
 LAYERS IN EACH SHEET DXF
@@ -13,7 +13,7 @@ LAYERS IN EACH SHEET DXF
   CUT      the part outlines. This is the only layer that must be cut.
   ENGRAVE  part numbers, single-stroke. Run as a light score/engrave,
            or switch the layer off if you do not want visible marks.
-  SHEET    600x450 reference rectangle. Not for cutting - delete or
+  SHEET    450x450 reference rectangle. Not for cutting - delete or
            switch off before sending to the laser.
 
 Part numbers match PART-CHART.pdf and the PART LIBRARY below. They are
@@ -98,181 +98,201 @@ The 5 mm holes are for LEDs; the larger holes are access ports.
 SHEET CONTENTS
 ----------------------------------------------------------------------
 
-Sheet 01  (20 parts, 11 rotated 90 deg, 90.3% of sheet area)
-    part   0 x  3    313.18 x  197.73 mm
+Sheet 01  (14 parts, 3 rotated 90 deg, 89.1% of sheet area)
+    part   0 x  2    313.18 x  197.73 mm
+    part   1 x  1    273.17 x   91.15 mm
     part   4 x  1    101.89 x  157.72 mm
-    part   9 x  3    107.01 x   69.21 mm
-    part  11 x  1    103.05 x   56.98 mm
-    part  14 x  2    133.48 x   26.95 mm
-    part  19 x  2     76.90 x   19.18 mm
-    part  33 x  1     12.00 x   43.70 mm
-    part  34 x  4     13.47 x   38.34 mm
-    part  35 x  1     40.04 x   11.97 mm
-    part  37 x  1     14.96 x   25.89 mm
-    part  40 x  1     22.89 x   13.29 mm
-
-Sheet 02  (18 parts, 10 rotated 90 deg, 90.6% of sheet area)
-    part   0 x  3    313.18 x  197.73 mm
-    part   4 x  1    101.89 x  157.72 mm
-    part   9 x  3    107.01 x   69.21 mm
-    part  11 x  1    103.05 x   56.98 mm
-    part  14 x  1    133.48 x   26.95 mm
-    part  15 x  2     32.58 x  103.05 mm
-    part  19 x  1     76.90 x   19.18 mm
-    part  34 x  2     13.47 x   38.34 mm
-    part  35 x  3     40.04 x   11.97 mm
-    part  37 x  1     14.96 x   25.89 mm
-
-Sheet 03  (19 parts, 11 rotated 90 deg, 90.7% of sheet area)
-    part   0 x  3    313.18 x  197.73 mm
-    part   4 x  1    101.89 x  157.72 mm
-    part   9 x  3    107.01 x   69.21 mm
-    part  11 x  1    103.05 x   56.98 mm
-    part  15 x  3     32.58 x  103.05 mm
-    part  19 x  1     76.90 x   19.18 mm
-    part  31 x  1     23.34 x   22.89 mm
-    part  34 x  2     13.47 x   38.34 mm
-    part  35 x  3     40.04 x   11.97 mm
-    part  37 x  1     14.96 x   25.89 mm
-
-Sheet 04  (25 parts, 10 rotated 90 deg, 87.7% of sheet area)
-    part   0 x  1    313.18 x  197.73 mm
-    part   1 x  5    273.17 x   91.15 mm
-    part   8 x  1    109.05 x   74.05 mm
-    part  10 x  2    107.01 x   57.25 mm
-    part  11 x  1    103.05 x   56.98 mm
-    part  12 x  1     63.47 x   60.85 mm
-    part  14 x  2    133.48 x   26.95 mm
-    part  16 x  2    130.48 x   19.18 mm
-    part  17 x  1     24.43 x   87.08 mm
-    part  20 x  1     24.21 x   58.12 mm
-    part  21 x  1     41.96 x   23.30 mm
-    part  26 x  1     39.01 x   20.87 mm
-    part  33 x  3     12.00 x   43.70 mm
-    part  34 x  1     13.47 x   38.34 mm
-    part  37 x  1     14.96 x   25.89 mm
-    part  40 x  1     22.89 x   13.29 mm
-
-Sheet 05  (28 parts, 11 rotated 90 deg, 89.2% of sheet area)
-    part   1 x  5    273.17 x   91.15 mm
-    part   2 x  4    124.44 x  157.72 mm
-    part   5 x  1     86.79 x  183.36 mm
-    part  10 x  2    107.01 x   57.25 mm
-    part  17 x  1     24.43 x   87.08 mm
-    part  20 x  2     24.21 x   58.12 mm
-    part  35 x  2     40.04 x   11.97 mm
-    part  37 x  5     14.96 x   25.89 mm
-    part  38 x  2     14.96 x   25.89 mm
-    part  40 x  2     22.89 x   13.29 mm
-    part  41 x  1     22.89 x   13.29 mm
-    part  47 x  1     14.70 x   14.56 mm
-
-Sheet 06  (24 parts, 15 rotated 90 deg, 88.0% of sheet area)
-    part   2 x  6    124.44 x  157.72 mm
-    part   3 x  4    136.48 x  124.39 mm
-    part   4 x  1    101.89 x  157.72 mm
-    part   8 x  2    109.05 x   74.05 mm
-    part  10 x  1    107.01 x   57.25 mm
-    part  12 x  1     63.47 x   60.85 mm
-    part  14 x  1    133.48 x   26.95 mm
-    part  15 x  1     32.58 x  103.05 mm
-    part  33 x  3     12.00 x   43.70 mm
-    part  35 x  1     40.04 x   11.97 mm
-    part  40 x  2     22.89 x   13.29 mm
-    part  46 x  1     18.38 x   12.00 mm
-
-Sheet 07  (33 parts, 15 rotated 90 deg, 88.2% of sheet area)
-    part   3 x  6    136.48 x  124.39 mm
-    part   4 x  6    101.89 x  157.72 mm
-    part   5 x  1     86.79 x  183.36 mm
-    part  12 x  2     63.47 x   60.85 mm
-    part  14 x  1    133.48 x   26.95 mm
-    part  15 x  2     32.58 x  103.05 mm
-    part  21 x  1     41.96 x   23.30 mm
-    part  29 x  2     22.07 x   35.65 mm
-    part  41 x  7     22.89 x   13.29 mm
-    part  42 x  2     22.89 x   13.29 mm
-    part  44 x  1     23.18 x   12.00 mm
-    part  46 x  2     18.38 x   12.00 mm
-
-Sheet 08  (25 parts, 12 rotated 90 deg, 87.7% of sheet area)
-    part   5 x  8     86.79 x  183.36 mm
-    part   6 x  4    173.12 x   90.08 mm
-    part   8 x  1    109.05 x   74.05 mm
-    part   9 x  1    107.01 x   69.21 mm
-    part  10 x  2    107.01 x   57.25 mm
-    part  12 x  2     63.47 x   60.85 mm
-    part  14 x  1    133.48 x   26.95 mm
-    part  15 x  2     32.58 x  103.05 mm
-    part  38 x  3     14.96 x   25.89 mm
-    part  45 x  1     20.00 x   12.43 mm
-
-Sheet 09  (27 parts, 14 rotated 90 deg, 87.6% of sheet area)
-    part   6 x  6    173.12 x   90.08 mm
-    part   7 x  7    183.36 x   83.02 mm
-    part  10 x  1    107.01 x   57.25 mm
-    part  11 x  2    103.05 x   56.98 mm
-    part  12 x  1     63.47 x   60.85 mm
     part  14 x  2    133.48 x   26.95 mm
     part  16 x  1    130.48 x   19.18 mm
     part  17 x  1     24.43 x   87.08 mm
     part  21 x  1     41.96 x   23.30 mm
-    part  33 x  1     12.00 x   43.70 mm
+    part  26 x  1     39.01 x   20.87 mm
+    part  33 x  3     12.00 x   43.70 mm
+    part  37 x  1     14.96 x   25.89 mm
+
+Sheet 02  (14 parts, 1 rotated 90 deg, 89.5% of sheet area)
+    part   0 x  2    313.18 x  197.73 mm
+    part   1 x  1    273.17 x   91.15 mm
+    part   4 x  1    101.89 x  157.72 mm
+    part  14 x  2    133.48 x   26.95 mm
+    part  17 x  3     24.43 x   87.08 mm
+    part  26 x  1     39.01 x   20.87 mm
+    part  34 x  4     13.47 x   38.34 mm
+
+Sheet 03  (14 parts, 1 rotated 90 deg, 89.5% of sheet area)
+    part   0 x  2    313.18 x  197.73 mm
+    part   1 x  1    273.17 x   91.15 mm
+    part   4 x  1    101.89 x  157.72 mm
+    part  14 x  2    133.48 x   26.95 mm
+    part  17 x  3     24.43 x   87.08 mm
+    part  26 x  1     39.01 x   20.87 mm
+    part  34 x  4     13.47 x   38.34 mm
+
+Sheet 04  (14 parts, 5 rotated 90 deg, 89.7% of sheet area)
+    part   0 x  2    313.18 x  197.73 mm
+    part   1 x  1    273.17 x   91.15 mm
+    part   4 x  1    101.89 x  157.72 mm
+    part  14 x  1    133.48 x   26.95 mm
+    part  15 x  1     32.58 x  103.05 mm
+    part  17 x  1     24.43 x   87.08 mm
+    part  18 x  2     24.43 x   87.08 mm
+    part  20 x  1     24.21 x   58.12 mm
+    part  34 x  2     13.47 x   38.34 mm
+    part  35 x  2     40.04 x   11.97 mm
+
+Sheet 05  (14 parts, 7 rotated 90 deg, 89.8% of sheet area)
+    part   0 x  2    313.18 x  197.73 mm
+    part   1 x  1    273.17 x   91.15 mm
+    part   4 x  1    101.89 x  157.72 mm
+    part  15 x  2     32.58 x  103.05 mm
+    part  18 x  4     24.43 x   87.08 mm
+    part  35 x  3     40.04 x   11.97 mm
+    part  37 x  1     14.96 x   25.89 mm
+
+Sheet 06  (21 parts, 7 rotated 90 deg, 87.6% of sheet area)
+    part   1 x  5    273.17 x   91.15 mm
+    part   9 x  1    107.01 x   69.21 mm
+    part  10 x  4    107.01 x   57.25 mm
+    part  11 x  2    103.05 x   56.98 mm
+    part  12 x  1     63.47 x   60.85 mm
+    part  20 x  1     24.21 x   58.12 mm
+    part  21 x  1     41.96 x   23.30 mm
+    part  26 x  1     39.01 x   20.87 mm
+    part  31 x  1     23.34 x   22.89 mm
+    part  36 x  1     23.95 x   19.54 mm
     part  38 x  3     14.96 x   25.89 mm
-    part  40 x  1     22.89 x   13.29 mm
 
-Sheet 10  (58 parts, 36 rotated 90 deg, 84.1% of sheet area)
-    part   7 x  3    183.36 x   83.02 mm
-    part   8 x  6    109.05 x   74.05 mm
-    part  10 x  2    107.01 x   57.25 mm
-    part  11 x  4    103.05 x   56.98 mm
-    part  12 x  3     63.47 x   60.85 mm
-    part  13 x 10     63.47 x   57.55 mm
-    part  16 x  7    130.48 x   19.18 mm
-    part  17 x  7     24.43 x   87.08 mm
-    part  18 x  3     24.43 x   87.08 mm
-    part  19 x  2     76.90 x   19.18 mm
-    part  21 x  3     41.96 x   23.30 mm
-    part  26 x  2     39.01 x   20.87 mm
-    part  29 x  1     22.07 x   35.65 mm
+Sheet 07  (21 parts, 12 rotated 90 deg, 87.1% of sheet area)
+    part   2 x  7    124.44 x  157.72 mm
+    part   9 x  3    107.01 x   69.21 mm
+    part  15 x  1     32.58 x  103.05 mm
+    part  16 x  2    130.48 x   19.18 mm
+    part  18 x  1     24.43 x   87.08 mm
+    part  19 x  3     76.90 x   19.18 mm
+    part  26 x  1     39.01 x   20.87 mm
+    part  35 x  1     40.04 x   11.97 mm
+    part  37 x  1     14.96 x   25.89 mm
+    part  47 x  1     14.70 x   14.56 mm
+
+Sheet 08  (24 parts, 9 rotated 90 deg, 86.1% of sheet area)
+    part   2 x  3    124.44 x  157.72 mm
+    part   3 x  5    136.48 x  124.39 mm
+    part   9 x  1    107.01 x   69.21 mm
+    part  14 x  2    133.48 x   26.95 mm
+    part  15 x  1     32.58 x  103.05 mm
+    part  16 x  2    130.48 x   19.18 mm
+    part  18 x  1     24.43 x   87.08 mm
+    part  20 x  2     24.21 x   58.12 mm
+    part  35 x  1     40.04 x   11.97 mm
+    part  37 x  2     14.96 x   25.89 mm
+    part  38 x  3     14.96 x   25.89 mm
+    part  47 x  1     14.70 x   14.56 mm
+
+Sheet 09  (23 parts, 10 rotated 90 deg, 87.0% of sheet area)
+    part   3 x  5    136.48 x  124.39 mm
+    part   4 x  3    101.89 x  157.72 mm
+    part   5 x  1     86.79 x  183.36 mm
+    part   9 x  2    107.01 x   69.21 mm
+    part  14 x  1    133.48 x   26.95 mm
+    part  15 x  1     32.58 x  103.05 mm
+    part  21 x  1     41.96 x   23.30 mm
+    part  26 x  1     39.01 x   20.87 mm
+    part  33 x  4     12.00 x   43.70 mm
+    part  38 x  4     14.96 x   25.89 mm
+
+Sheet 10  (25 parts, 12 rotated 90 deg, 85.4% of sheet area)
+    part   4 x  2    101.89 x  157.72 mm
+    part   5 x  6     86.79 x  183.36 mm
+    part   8 x  2    109.05 x   74.05 mm
+    part  12 x  2     63.47 x   60.85 mm
+    part  16 x  5    130.48 x   19.18 mm
+    part  17 x  1     24.43 x   87.08 mm
+    part  19 x  3     76.90 x   19.18 mm
+    part  21 x  1     41.96 x   23.30 mm
+    part  32 x  1     23.34 x   22.89 mm
+    part  35 x  1     40.04 x   11.97 mm
+    part  37 x  1     14.96 x   25.89 mm
+
+Sheet 11  (18 parts, 10 rotated 90 deg, 86.1% of sheet area)
+    part   5 x  3     86.79 x  183.36 mm
+    part   6 x  5    173.12 x   90.08 mm
+    part   8 x  2    109.05 x   74.05 mm
+    part  10 x  1    107.01 x   57.25 mm
+    part  11 x  3    103.05 x   56.98 mm
+    part  12 x  1     63.47 x   60.85 mm
+    part  15 x  1     32.58 x  103.05 mm
+    part  21 x  1     41.96 x   23.30 mm
     part  33 x  1     12.00 x   43.70 mm
-    part  38 x  2     14.96 x   25.89 mm
-    part  39 x  1     19.18 x   20.05 mm
-    part  42 x  1     22.89 x   13.29 mm
 
-Sheet 11  (243 parts, 151 rotated 90 deg, 56.0% of sheet area)
-    part  18 x  7     24.43 x   87.08 mm
+Sheet 12  (23 parts, 13 rotated 90 deg, 87.0% of sheet area)
+    part   6 x  5    173.12 x   90.08 mm
+    part   7 x  3    183.36 x   83.02 mm
+    part   8 x  3    109.05 x   74.05 mm
+    part   9 x  1    107.01 x   69.21 mm
+    part  10 x  2    107.01 x   57.25 mm
+    part  17 x  1     24.43 x   87.08 mm
+    part  18 x  2     24.43 x   87.08 mm
+    part  32 x  1     23.34 x   22.89 mm
+    part  37 x  3     14.96 x   25.89 mm
+    part  40 x  1     22.89 x   13.29 mm
+    part  45 x  1     20.00 x   12.43 mm
+
+Sheet 13  (22 parts, 8 rotated 90 deg, 86.6% of sheet area)
+    part   7 x  7    183.36 x   83.02 mm
+    part   8 x  3    109.05 x   74.05 mm
+    part   9 x  2    107.01 x   69.21 mm
+    part  10 x  3    107.01 x   57.25 mm
+    part  13 x  1     63.47 x   57.55 mm
+    part  15 x  1     32.58 x  103.05 mm
+    part  20 x  1     24.21 x   58.12 mm
+    part  21 x  1     41.96 x   23.30 mm
+    part  26 x  1     39.01 x   20.87 mm
+    part  28 x  1     19.18 x   41.79 mm
+    part  37 x  1     14.96 x   25.89 mm
+
+Sheet 14  (94 parts, 44 rotated 90 deg, 79.2% of sheet area)
+    part  11 x  5    103.05 x   56.98 mm
+    part  12 x  6     63.47 x   60.85 mm
+    part  13 x  9     63.47 x   57.55 mm
+    part  15 x  2     32.58 x  103.05 mm
     part  19 x  4     76.90 x   19.18 mm
-    part  20 x  7     24.21 x   58.12 mm
+    part  20 x  5     24.21 x   58.12 mm
     part  21 x  4     41.96 x   23.30 mm
     part  22 x 10     23.30 x   41.96 mm
     part  23 x 10     41.96 x   23.30 mm
     part  24 x 10     41.96 x   23.30 mm
     part  25 x 10     41.96 x   23.30 mm
-    part  26 x  7     39.01 x   20.87 mm
-    part  27 x 10     39.01 x   20.87 mm
-    part  28 x 10     19.18 x   41.79 mm
-    part  29 x  7     22.07 x   35.65 mm
-    part  30 x 10     35.70 x   20.07 mm
-    part  31 x  9     23.34 x   22.89 mm
-    part  32 x 10     23.34 x   22.89 mm
+    part  26 x  3     39.01 x   20.87 mm
+    part  27 x  8     39.01 x   20.87 mm
+    part  31 x  2     23.34 x   22.89 mm
     part  33 x  1     12.00 x   43.70 mm
-    part  34 x  1     13.47 x   38.34 mm
-    part  36 x 10     23.95 x   19.54 mm
-    part  37 x  1     14.96 x   25.89 mm
-    part  39 x  9     19.18 x   20.05 mm
-    part  40 x  3     22.89 x   13.29 mm
-    part  41 x  2     22.89 x   13.29 mm
-    part  42 x  7     22.89 x   13.29 mm
+    part  35 x  2     40.04 x   11.97 mm
+    part  44 x  1     23.18 x   12.00 mm
+    part  45 x  1     20.00 x   12.43 mm
+    part  51 x  1     13.17 x   15.10 mm
+
+Sheet 15  (179 parts, 63 rotated 90 deg, 34.1% of sheet area)
+    part  27 x  2     39.01 x   20.87 mm
+    part  28 x  9     19.18 x   41.79 mm
+    part  29 x 10     22.07 x   35.65 mm
+    part  30 x 10     35.70 x   20.07 mm
+    part  31 x  7     23.34 x   22.89 mm
+    part  32 x  8     23.34 x   22.89 mm
+    part  33 x  1     12.00 x   43.70 mm
+    part  36 x  9     23.95 x   19.54 mm
+    part  39 x 10     19.18 x   20.05 mm
+    part  40 x  9     22.89 x   13.29 mm
+    part  41 x 10     22.89 x   13.29 mm
+    part  42 x 10     22.89 x   13.29 mm
     part  43 x 10     13.29 x   22.89 mm
     part  44 x  9     23.18 x   12.00 mm
-    part  45 x  9     20.00 x   12.43 mm
-    part  46 x  7     18.38 x   12.00 mm
-    part  47 x  9     14.70 x   14.56 mm
+    part  45 x  8     20.00 x   12.43 mm
+    part  46 x 10     18.38 x   12.00 mm
+    part  47 x  8     14.70 x   14.56 mm
     part  48 x 10     14.70 x   14.56 mm
     part  49 x 10     14.70 x   14.56 mm
     part  50 x 10     14.70 x   14.56 mm
-    part  51 x 10     13.17 x   15.10 mm
+    part  51 x  9     13.17 x   15.10 mm
 
 OPEN CONTOURS IN THE SOURCE
 ----------------------------------------------------------------------

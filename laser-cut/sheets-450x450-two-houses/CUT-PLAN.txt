@@ -4,6 +4,7 @@ Source      : Simpsons House with precuts.dxf
 Houses      : 2
 Sheet       : 450 (X) x 450 (Y) mm, 5.0 mm border, 3.0 mm between parts
 Parts/house : 52   Total parts: 104
+Cutouts     : 6 circular panel cutouts/house   12 total
 Sheets      : 3
 Units       : millimetres (DXF $INSUNITS = 4)
 
@@ -29,14 +30,14 @@ PART LIBRARY (one house)
 ----------------------------------------------------------------------
   ID     width    height  entities  engraved
    0    313.18    197.73       246     7.0 mm
-   1    273.17     91.15        74     7.0 mm
-   2    124.44    157.72       123     7.0 mm
+   1    273.17     91.15        75     7.0 mm
+   2    124.44    157.72       124     7.0 mm
    3    136.48    124.39        97     7.0 mm
    4    101.89    157.72       159     7.0 mm
    5     86.79    183.36        20     7.0 mm
-   6    173.12     90.08       111     7.0 mm
+   6    173.12     90.08       112     7.0 mm
    7    183.36     83.02        20     7.0 mm
-   8    109.05     74.05        48     7.0 mm
+   8    109.05     74.05        51     7.0 mm
    9    107.01     69.21        20     7.0 mm
   10    107.01     57.25        20     7.0 mm
   11    103.05     56.98       168     7.0 mm
@@ -80,6 +81,19 @@ PART LIBRARY (one house)
   49     14.70     14.56         7     3.0 mm
   50     14.70     14.56         7     3.0 mm
   51     13.17     15.10        12  5.1 mm rot
+
+CIRCULAR PANEL CUTOUTS (one house)
+----------------------------------------------------------------------
+These are CUT-layer holes at their authored positions inside the parts.
+The 5 mm holes are for LEDs; the larger holes are access ports.
+
+  part    diameter     local X     local Y
+     1     22.361      80.189      60.551
+     2     50.000      82.206     100.206
+     6      5.000      88.189      52.400
+     8     36.056      57.640      43.366
+     8      5.000      27.640      53.366
+     8      5.000      87.640      53.366
 
 SHEET CONTENTS
 ----------------------------------------------------------------------
@@ -150,20 +164,6 @@ Sheet 03  (62 parts, 34 rotated 90 deg, 75.0% of sheet area)
     part  40 x  2     22.89 x   13.29 mm
     part  45 x  2     20.00 x   12.43 mm
     part  46 x  2     18.38 x   12.00 mm
-
-EXCLUDED CIRCLES - NOT PLACED ON ANY PART IN THE SOURCE DXF
-----------------------------------------------------------------------
-All real parts occupy X 3..662, Y 0..480 mm.
-These 6 circles sit at negative X, well outside every part, so they
-cannot be cable holes as exported. Re-export with them positioned on
-the panels, or say which part and where, and they can be added.
-
-    dia  50.00 mm at (  -620.00,  418.21)   623 mm left of all parts
-    dia  36.06 mm at (  -485.00,  383.21)   488 mm left of all parts
-    dia   5.00 mm at (  -515.22,  295.19)   518 mm left of all parts
-    dia   5.00 mm at (  -455.00,  393.21)   458 mm left of all parts
-    dia   5.00 mm at (  -515.00,  393.21)   518 mm left of all parts
-    dia  22.36 mm at (   -85.00,   63.21)   88 mm left of all parts
 
 OPEN CONTOURS IN THE SOURCE
 ----------------------------------------------------------------------

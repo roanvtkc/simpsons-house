@@ -19,7 +19,7 @@ AP.add_argument('--margin', type=float, default=5.0, help='clear border inside s
 AP.add_argument('--gap', type=float, default=3.0, help='clear space between parts')
 AP.add_argument('--no-rotate', action='store_true')
 AP.add_argument('--keep-strays', action='store_true',
-                help='include the 6 isolated circles at negative X')
+                help='include any truly isolated circles not contained by a part')
 AP.add_argument('--outdir', default='nested')
 AP.add_argument('--no-engrave', action='store_true',
                 help='omit the ENGRAVE layer with part numbers')
@@ -47,6 +47,15 @@ if args.keep_strays:
 
 records.sort(key=lambda r: -(r['w'] * r['h']))
 print(f"parts/house: {len(records)}   excluded strays: {len(strays)}")
+cutouts = []
+for pi, r in enumerate(records):
+    for i in r['idx']:
+        e = ents[i]
+        if e.dxftype() == 'CIRCLE':
+            c = e.dxf.center
+            cutouts.append((pi, e.dxf.radius * 2,
+                            c[0] - r['ox'], c[1] - r['oy']))
+print(f"circular panel cutouts/house: {len(cutouts)}")
 # -------------------------------------------------- engrave label per part
 # The number goes at the roomiest spot on the part's material, turned along the
 # grain of a narrow band if that is the only way it fits. Holes, scrap and open
@@ -187,11 +196,13 @@ src_counts = collections.Counter()
 for pi, r in enumerate(records):
     src_counts[pi] = len(r['idx'])
 expected_ents = sum(src_counts[pi] for b in sheets for pi, _, _, _, _ in placed[b])
+expected_circles = len(cutouts) * args.copies
 print(f"entities to emit: {expected_ents} "
       f"(= {sum(src_counts.values())}/house x {args.copies})")
 
 sheet_report = []
 emitted_total = 0
+emitted_circles = 0
 for si, b in enumerate(sheets, 1):
     out = ezdxf.new('R2010', setup=False)
     out.header['$INSUNITS'] = 4  # millimetres
@@ -230,7 +241,10 @@ for si, b in enumerate(sheets, 1):
     out.saveas(path)
     back = ezdxf.readfile(path)
     n_cut = sum(1 for e in back.modelspace() if e.dxf.layer == 'CUT')
+    n_circles = sum(1 for e in back.modelspace()
+                    if e.dxf.layer == 'CUT' and e.dxftype() == 'CIRCLE')
     emitted_total += n_cut
+    emitted_circles += n_circles
     sheet_report.append((si, len(placed[b]), used / SHEET_AREA * 100, path))
     print(f"  sheet {si:2d}: {len(placed[b]):3d} parts, {used/SHEET_AREA*100:5.1f}% area used -> {path}")
 
@@ -290,7 +304,10 @@ print(f"\npreview -> {args.outdir}/nest-preview.svg")
 tot = sum(r[2] for r in sheet_report) / len(sheet_report)
 print(f"average sheet utilisation (bbox): {tot:.1f}%")
 assert emitted_total == expected_ents, (emitted_total, expected_ents)
+assert emitted_circles == expected_circles, (emitted_circles, expected_circles)
 print(f"round-trip check: {emitted_total} CUT entities read back from DXFs  [OK]")
+print(f"cutout check: {emitted_circles} CIRCLE entities read back "
+      f"(= {len(cutouts)}/house x {args.copies})  [OK]")
 
 # ------------------------------------------------------------------ manifest
 lines = ["SIMPSONS HOUSE - NESTED CUT PLAN",
@@ -300,6 +317,8 @@ lines = ["SIMPSONS HOUSE - NESTED CUT PLAN",
          f"Sheet       : {SW:.0f} (X) x {SH:.0f} (Y) mm, {args.margin:.1f} mm border, "
          f"{args.gap:.1f} mm between parts",
          f"Parts/house : {len(records)}   Total parts: {len(records)*args.copies}",
+         f"Cutouts     : {len(cutouts)} circular panel cutouts/house   "
+         f"{expected_circles} total",
          f"Sheets      : {len(sheets)}",
          f"Units       : millimetres (DXF $INSUNITS = 4)",
          "",
@@ -330,6 +349,14 @@ for pi, r in enumerate(records):
         if r['label'] else "no room"
     lines.append(f"{pi:4d}  {r['w']:8.2f}  {r['h']:8.2f}  {len(r['idx']):8d}  {tag:>9}")
 
+lines += ["", "CIRCULAR PANEL CUTOUTS (one house)", "-" * 70,
+          "These are CUT-layer holes at their authored positions inside the parts.",
+          "The 5 mm holes are for LEDs; the larger holes are access ports.",
+          "",
+          f"{'part':>6}  {'diameter':>10}  {'local X':>10}  {'local Y':>10}"]
+for pi, diameter, local_x, local_y in cutouts:
+    lines.append(f"{pi:6d}  {diameter:9.3f}  {local_x:10.3f}  {local_y:10.3f}")
+
 lines += ["", "SHEET CONTENTS", "-" * 70]
 for si, b in enumerate(sheets, 1):
     ids = collections.Counter(pi for pi, _, _, _, _ in placed[b])
@@ -344,13 +371,12 @@ if strays:
     hull = (min(r['ox'] for r in records), min(r['oy'] for r in records),
             max(r['ox'] + r['w'] for r in records),
             max(r['oy'] + r['h'] for r in records))
-    lines += ["", "EXCLUDED CIRCLES - NOT PLACED ON ANY PART IN THE SOURCE DXF",
+    lines += ["", "EXCLUDED ISOLATED CIRCLES",
               "-" * 70,
               f"All real parts occupy X {hull[0]:.0f}..{hull[2]:.0f}, "
               f"Y {hull[1]:.0f}..{hull[3]:.0f} mm.",
-              "These 6 circles sit at negative X, well outside every part, so they",
-              "cannot be cable holes as exported. Re-export with them positioned on",
-              "the panels, or say which part and where, and they can be added.",
+              "These circles remain outside every part after OCS-to-world coordinate",
+              "normalization and are therefore excluded unless --keep-strays is used.",
               ""]
     for r in strays:
         dx = hull[0] - (r['ox'] + r['w'] / 2)

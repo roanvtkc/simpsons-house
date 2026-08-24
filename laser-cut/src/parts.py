@@ -14,6 +14,18 @@ def load_components(src=SRC):
     msp = doc.modelspace()
     ents = [e for e in msp if e.dxftype() in ('LINE', 'CIRCLE')]
 
+    # DXF stores a CIRCLE centre in the entity's object coordinate system
+    # (OCS), unlike LINE endpoints. The Shapr3D export uses a reversed normal,
+    # so reading dxf.center directly makes the six panel cutouts appear at
+    # negative X even though their world-coordinate positions are inside the
+    # panels. Normalize them once here so every downstream geometry operation
+    # sees the authored sheet coordinates.
+    for e in ents:
+        if e.dxftype() == 'CIRCLE':
+            c = e.ocs().to_wcs(e.dxf.center)
+            e.dxf.center = (c.x, c.y, 0.0)
+            e.dxf.extrusion = (0.0, 0.0, 1.0)
+
     parent = {}
 
     def find(a):

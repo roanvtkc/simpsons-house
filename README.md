@@ -26,6 +26,13 @@ A comprehensive smart home automation project that allows you to control LEDs an
 - **🕵️ mDNS Discovery**: Automatic network device discovery
 - **⚙️ Systemd Integration**: Professional service management
 
+## 🔥 Laser-cut plans
+
+Ready-to-import DXF plans are available for two or ten houses on a 450 × 450 mm
+bed, plus a ten-house 600 × 450 mm option. See the
+[laser-cut guide](laser-cut/README.md) for the sheet files, previews, part chart,
+layer settings, and verification results.
+
 ## 🏗️ System Architecture
 
 ```mermaid
