@@ -331,6 +331,102 @@ is actually shut, a temperature sensor on the roof.
 
 ---
 
+## Motors — DC and stepper
+
+Motors are the one extension that needs more than a wire and a resistor. They
+are worth doing, but read this section before buying parts.
+
+The garage door used a 28BYJ-48 stepper in an earlier version of this project
+and was changed to a servo, because a servo needs one pin, no driver board and
+no separate power supply. If you want a motor back, you are re-adding that
+complexity deliberately — which is a genuinely good extension exercise.
+
+### Why a motor cannot go straight on a GPIO pin
+
+| Component | Rough current |
+|---|---|
+| LED | 10 mA |
+| SG90 servo, moving | 100–250 mA |
+| 28BYJ-48 stepper | 200 mA+ |
+| Small DC motor, stalled | 1 A or more |
+
+A GPIO pin can supply about **16 mA**, and the whole chip about **50 mA**.
+Connecting a motor directly will not work, and can damage the Pi. Every motor
+needs two extra things:
+
+1. **Its own power supply** — with the ground connected to a Pi GND pin, so
+   the two share a common ground. Without the common ground the Pi and the
+   driver disagree about what 0V means, and nothing works.
+2. **A driver** — a transistor, Darlington array or H-bridge that lets a tiny
+   GPIO signal switch a much larger current.
+
+### Option A — DC motor
+
+Simplest movement, but no position control: it spins while powered and coasts
+to a stop.
+
+- **One direction, on/off:** a single transistor (a 2N2222 for a very small
+  motor, or a logic-level MOSFET) plus a **flyback diode** across the motor
+  terminals. The diode is not optional — a motor coil generates a reverse
+  voltage spike when switched off, which will eventually kill the transistor.
+- **Both directions:** an H-bridge board such as an L298N, DRV8833 or
+  TB6612FNG. Two GPIO pins select direction, a third does speed via PWM.
+
+Speed control reuses the same PWM idea as the servos, but the number means
+power rather than position:
+
+```python
+FAN_PIN = 12
+fan_pwm = GPIO.PWM(FAN_PIN, 1000)   # 1 kHz suits a motor; 50 Hz would judder
+fan_pwm.start(0)
+
+def control_fan(speed: int) -> bool:
+    """speed is 0-100 percent."""
+    try:
+        fan_pwm.ChangeDutyCycle(speed)
+        logger.info(f"Fan -> {speed}%")
+        return True
+    except Exception as e:
+        logger.error(f"Fan control error: {e}")
+        return False
+```
+
+Send it a number rather than `ON`/`OFF`, and parse the payload the way the
+range example above does.
+
+### Option B — Stepper motor
+
+Precise positioning without feedback: you tell it how many steps to move and
+it moves exactly that far, as long as nothing stops it. This is *open-loop*
+control — if the door jams, the Pi has no idea.
+
+A 28BYJ-48 with a ULN2003 driver board is the usual classroom choice. It needs
+**four GPIO pins**, one per coil, because the Pi energises the coils itself.
+
+A ready-made test script is in the repo:
+
+```bash
+sudo systemctl stop simpsons-house.service
+python3 extensions/stepper_test.py
+```
+
+It uses GPIO 5, 6, 13 and 19 and turns the motor one revolution each way. Read
+the header comment first — it has the wiring and the power warning.
+
+To drive it from MQTT, wrap the stepping logic in a control function and call
+it from an `on_message()` branch, exactly like the eight steps above. Keep the
+move short: `on_message()` is blocking, so a long slow rotation will freeze the
+listener and delay every other command until it finishes.
+
+### Pins to avoid
+
+Already used by the standard build: **17** (light), **23** (front door servo),
+**27** (garage servo).
+
+Free to use: **5, 6, 12, 13, 16, 19, 20, 21, 26**.
+
+---
+
 ## When it does not work
 
 | Symptom | Check |

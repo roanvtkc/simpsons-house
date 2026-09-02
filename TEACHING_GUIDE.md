@@ -23,7 +23,7 @@ The Python script sends a HIGH/LOW signal to a GPIO pin
         ↓
 The GPIO pin sends electricity to the real hardware
         ↓
-The LED turns on / the motor spins / the servo moves
+The LED turns on / the servo moves
         ↓
 The Python script publishes a status message back ("ON")
         ↓
@@ -216,7 +216,7 @@ Button(action: { onToggle() }) {
 
 ### `GarageDoorCard.swift` — Garage-specific tile
 
-Similar to `DeviceCard` but has separate OPEN and CLOSE buttons instead of a toggle, because sending OPEN when it's already open is a meaningful command (the motor needs a direction).
+Similar to `DeviceCard` but has separate OPEN and CLOSE buttons instead of a toggle, because OPEN and CLOSE are absolute positions, not a toggle — sending OPEN when the door is already open simply re-asserts that angle.
 
 ---
 
@@ -306,8 +306,9 @@ you want to move. `control_garage_door()` and `control_door()` both map
 mount the servo horn.
 
 **Teaching point:** this is the difference between *open-loop* and *closed-loop*
-control. A stepper (the old design) is open-loop — you count steps and hope. A
-servo is closed-loop — it measures its own position and corrects itself.
+control. A stepper is open-loop — you count steps and hope. A servo is closed-loop
+— it measures its own position and corrects itself. (Driving a stepper is a
+student extension: see `EXTENSION_GUIDE.md`.)
 
 ---
 
@@ -361,7 +362,6 @@ After carrying out a command, the Pi sends a status update back to the app:
 | `home/light/status` | Plain text | `ON` |
 | `home/garage/status` | Plain text | `OPEN` |
 | `home/door/status` | Plain text | `ON` |
-| `home/garage/motor_status` | JSON | `{"running": false, "position": 100}` |
 | `home/status` | JSON | All device states + timestamp |
 | `home/system` | JSON | Version, GPIO pin layout |
 
@@ -372,7 +372,7 @@ After carrying out a command, the Pi sends a status update back to the app:
 ### Section 9–11: Utilities, Shutdown, and Main
 
 - **Signal handling** — catches Ctrl+C (`SIGINT`) and `systemd stop` (`SIGTERM`) to shut down cleanly
-- **`cleanup_and_exit`** — stops the motor, turns off LEDs, releases GPIO, disconnects from MQTT
+- **`cleanup_and_exit`** — stops both PWM channels, turns off LEDs, releases GPIO, disconnects from MQTT
 - **`main`** — the entry point: initialises GPIO, creates the MQTT client, connects, then runs forever processing messages
 
 ---
@@ -535,13 +535,13 @@ iOS does not have a built-in MQTT library. WebSocket is a standard protocol that
 
 **Q: Why does each servo need only one GPIO pin?**
 
-Everything the servo needs to know travels on a single signal wire, encoded as the width of a repeating pulse. The servo's own circuit reads that pulse and drives its motor. (The earlier stepper design needed four pins, because the Pi had to energise each of the motor's four coils itself.)
+Everything the servo needs to know travels on a single signal wire, encoded as the width of a repeating pulse. The servo's own circuit reads that pulse and drives its motor. A stepper is the opposite — it needs four pins, because the Pi has to energise each coil itself. That is covered as an extension in `EXTENSION_GUIDE.md`.
 
 **Q: Why not just use `GPIO.HIGH/LOW` for the servo too?**
 
 Servos need a very precise timing signal (a pulse between 1ms and 2ms wide, repeated 50 times per second) to know their target angle. PWM (Pulse Width Modulation) generates exactly that. GPIO.HIGH/LOW is on/off — no timing information.
 
-**Q: What happens if the Pi crashes while the motor is running?**
+**Q: What happens if the Pi crashes while a servo is moving?**
 
 The `cleanup_and_exit()` function runs in the `finally` block of `main()`, which Python always executes even on a crash. It stops both PWM channels and releases the GPIO pins before the process exits. The MQTT "last will" message also tells the app the controller went offline.
 

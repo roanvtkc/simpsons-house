@@ -226,9 +226,9 @@ The setup script will:
 ### Device Controls
 - **💡 Living Room Light**: Toggle the main lighting
 - **🚗 Garage Door**: Open and close using the garage servo
-  - `OPEN`: Turn motor to open the door
-  - `CLOSE`: Turn motor to close the door
-  - Future: Variable speed control via PWM
+  - `OPEN`: Drive the servo to the open angle
+  - `CLOSE`: Drive the servo to the closed angle
+  - Tuning these angles: see [SERVO_TUNING_GUIDE.md](SERVO_TUNING_GUIDE.md)
 - **🚪 Front Door**: Operate the servo-controlled entrance
 
 ### Features
@@ -351,7 +351,7 @@ mosquitto_sub -h localhost -t test/# -v
 avahi-browse -rt _mqtt._tcp
 ```
 
-### Test Motor Control
+### Test Device Control
 ```bash
 # Test individual devices
 mosquitto_pub -h localhost -t home/light -m ON
@@ -437,7 +437,8 @@ simpsons-house/
 ├── 🔐 install_ca.sh                # FortiGate certificate installer
 ├── 🧪 gpio_test.py                  # Hardware test: light + both servos
 ├── 🎛️  servo_calibrate.py            # Interactive servo angle finder
-├── 🧪 stepper_test.py                # DEPRECATED — old stepper test, kept for reference
+├── 📁 extensions/                   # Optional extension hardware
+│   └── 🧪 stepper_test.py           # Stepper motor test (extension only)
 ├── 📱 ios-app/                     # Swift Playgrounds app code
 │   └── ContentView.swift
 ├── 📋 systemd/                     # Systemd service files
@@ -466,13 +467,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🎯 Roadmap
 
 ### Upcoming Features
-- [ ] **Variable motor speed** control via PWM
-- [ ] **Motor direction reversal** commands
-- [ ] **Current sensing** for motor load monitoring
 - [ ] **Temperature sensors** and climate control
 - [ ] **Motion detection** and security features
 - [ ] **Voice control** integration (Siri Shortcuts)
 - [ ] **Web dashboard** for browser control
+
+> **Motors are extension work, not core.** DC motors, steppers, speed control and
+> direction reversal all need external power and a driver board, so they sit
+> outside the base build. See [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md).
 
 ### Version History
 - **v3.3** - Garage door moved from a 28BYJ-48 stepper + ULN2003 to an SG90 servo on GPIO 27
