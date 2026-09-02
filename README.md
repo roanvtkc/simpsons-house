@@ -26,6 +26,16 @@ A comprehensive smart home automation project that allows you to control LEDs an
 - **🕵️ mDNS Discovery**: Automatic network device discovery
 - **⚙️ Systemd Integration**: Professional service management
 
+## 📚 Guides
+
+| Guide | What it covers |
+|---|---|
+| [WIRING_GUIDE.md](WIRING_GUIDE.md) | Identifying each component, breadboard layout, per-device troubleshooting |
+| [SERVO_TUNING_GUIDE.md](SERVO_TUNING_GUIDE.md) | Changing how far the doors open, reversing direction, slowing the movement |
+| [EXTENSION_GUIDE.md](EXTENSION_GUIDE.md) | Adding your own circuits — the Python side and the Swift app side |
+| [TEACHING_GUIDE.md](TEACHING_GUIDE.md) | How a tap on the iPad becomes movement on the Pi |
+| [laser-cut/README.md](laser-cut/README.md) | DXF sheets, part chart, layer settings |
+
 ## 🔥 Laser-cut plans
 
 Ready-to-import DXF plans are available for two or ten houses on a 450 × 450 mm
@@ -271,6 +281,14 @@ GARAGE_SERVO_PIN = 27   # Garage door servo signal
 SERVO_PIN        = 23   # Front door servo signal
 ```
 
+### Servo Angles
+The front door and garage door angles are set in `control_door()` and `control_garage_door()` in `mqttlistener.py`:
+```python
+angle = 90 if state else 0   # OPEN = 90°, CLOSED = 0°
+```
+
+> 📖 **See [SERVO_TUNING_GUIDE.md](SERVO_TUNING_GUIDE.md)** for how to find the right angles for your model, reverse a door's direction, and slow the movement down — plus `servo_calibrate.py`, an interactive tool for jogging each servo to find its angles.
+
 ### Network Settings
 Update the iOS app host address:
 ```swift
@@ -412,10 +430,13 @@ shell the way an LED can — use the Python snippet in
 ```
 simpsons-house/
 ├── 📄 README.md                    # This file
+├── 📖 SERVO_TUNING_GUIDE.md         # Adjusting door angles, direction and speed
+├── 📖 EXTENSION_GUIDE.md            # Adding your own circuits (Python + Swift)
 ├── 🔧 setup.sh                     # Automated setup script
 ├── 🐍 mqttlistener.py               # Python MQTT listener with servo control
 ├── 🔐 install_ca.sh                # FortiGate certificate installer
 ├── 🧪 gpio_test.py                  # Hardware test: light + both servos
+├── 🎛️  servo_calibrate.py            # Interactive servo angle finder
 ├── 🧪 stepper_test.py                # DEPRECATED — old stepper test, kept for reference
 ├── 📱 ios-app/                     # Swift Playgrounds app code
 │   └── ContentView.swift
